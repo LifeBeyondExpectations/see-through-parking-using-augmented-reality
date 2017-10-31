@@ -13,4 +13,4 @@ origin image -> extract saturation component -> opening -> threshold -> dilate
 ![Alt text](/simpleVersion/result/img_open.png?raw=true "opening process")
 
 4. threshold
-![Alt text](/simpleVersion/result/cv2.THRESH_BINARY + cv2.THRESH_OTSU + blur.png?raw=true "threshold result")
+![Alt text](/simpleVersion/result/cv2_THRESH_BINARY_cv2_THRESH_OTSU_blur.png?raw=true "threshold result")
