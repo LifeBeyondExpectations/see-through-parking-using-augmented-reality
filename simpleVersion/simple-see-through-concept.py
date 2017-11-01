@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
+import pprint
+
 import numpy as np
 import cv2
 
@@ -16,6 +18,7 @@ from tempfile import TemporaryFile
 
 import glob
 import os
+
 
 #parameter
 path_image_database = '*.jpg'
@@ -453,7 +456,7 @@ class JS_lineSegmentation:
         if self.flag_imshow_on == 1:
             cv2.namedWindow('origin figure')
             cv2.imshow('origin figure', frame)
-            cv2.waitKey(0)
+            cv2.waitKey(1)
 
         # convert rgb to hsv
         img_saturation = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 1]
@@ -461,7 +464,7 @@ class JS_lineSegmentation:
         if self.flag_imshow_on == 1:
             cv2.namedWindow('saturation figure')
             cv2.imshow('saturation figure', img_saturation)
-            cv2.waitKey(0)
+            cv2.waitKey(1)
 
         # start to opening the image(morpoholgy)
         kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
@@ -469,7 +472,7 @@ class JS_lineSegmentation:
         if self.flag_imshow_on == 1:
             cv2.namedWindow('img_open')
             cv2.imshow('img_open', img_open)
-            cv2.waitKey(0)
+            cv2.waitKey(1)
 
         # threshold
         # _, img_threshold_otsu = cv2.threshold(np.array(img_open, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -487,7 +490,7 @@ class JS_lineSegmentation:
             # cv2.imshow('cv2.THRESH_BINARY', img_threshold)
             # cv2.imshow('cv2.THRESH_BINARY + cv2.THRESH_OTSU', img_threshold_otsu)
             cv2.imshow('cv2.THRESH_BINARY + cv2.THRESH_OTSU + blur', img_threshold_otsu_blur)
-            cv2.waitKey(0)
+            cv2.waitKey(1)
 
         # dilate image
         for img in [img_threshold_otsu_blur]: #img_threshold, img_threshold_otsu,
@@ -496,7 +499,7 @@ class JS_lineSegmentation:
             if self.flag_imshow_on == 1:
                 cv2.namedWindow('img_dilate')
                 cv2.imshow('img_dilate', img_dilate)
-                cv2.waitKey(0)
+                cv2.waitKey(1)
 
         # harris corner detector
         # https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_feature2d/py_features_harris/py_features_harris.html
@@ -513,9 +516,8 @@ class JS_lineSegmentation:
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.001)
         corners = cv2.cornerSubPix(np.array(img_dilate, dtype=np.float32), np.float32(centroids), (5, 5), (-1, -1), criteria)
 
-        # print('corner is ', corners, 'shape of the corner is ', corners.shape)
-
         if self.flag_print_on == 1:
+            print('shape of the corner is ', corners.shape)#'corner is ', corners,
             print('shape of the image', frame.shape)
             # print('what is dst', np.sort(dst), 'shape of the dst is ', dst.shape)
             # print('waht the fuck', dst > 0.01 * dst.max())
@@ -523,20 +525,54 @@ class JS_lineSegmentation:
 
         # Now draw them
         # frame[dst > 0.01 * dst.max()] = [0, 0, 255]
-        res = np.hstack((centroids, corners))
-        res = np.int0(res)
+        res = np.hstack((centroids, corners, (np.arange(corners.shape[0])).reshape(-1,1)))
+        res = np.array(res, dtype=np.uint)
+        if self.flag_print_on == 1:
+            print('res is after np.array')
+            self.myPrint(res)
 
-        for i in range(0, res.shape[0]):
-            # I do not know why res[0, :] is the center of the image..??
-            cv2.circle(frame, (res[i,0], res[i,1]), 5, (0,0,255))
-            cv2.circle(frame, (res[i,2], res[i,3]), 5, (0,255,0))
+        res_sorted = np.array(sorted(res, key=lambda res: res[2]), dtype=np.uint)
+        #res_sorted = np.sort(res, order='x2')
+        if self.flag_print_on == 1:
+            print('sorted res is ')
+            self.myPrint(res_sorted)
 
-            # print('res is ', res[i, :], 'shape of the res is ', res.shape)
-            # cv2.imshow('result of the corner detection', frame)
-            # cv2.waitKey(0)
+        index_center = np.where(res_sorted[:, 4] == 0)
+        print('index_center is ')
+        self.myPrint(index_center)
 
+        # first localize the out corners. Then calculate the distance from the vector of each two outliers.
+        # left_out_courner = res_sorted[(index_center-2) ]
+
+
+        num_of_src_points = 14 * 2
+        src_point = np.zeros((num_of_src_points, 2), dtype=np.uint)
+        for i in range(num_of_src_points):
+            # half on the left side, the others in right side.
+            if i >= (num_of_src_points / 2):
+                # do not include center because it is not a corner just symbol.
+                src_point[i] = res_sorted[(i + index_center[0] - (num_of_src_points / 2) + 1), 2:(3 + 1)]
+            else:
+                src_point[i] = res_sorted[(i + index_center[0] - (num_of_src_points / 2)), 2:(3+1)]
+
+        if self.flag_print_on == 1:
+            print('src_point', src_point)
+            #self.myPrint(src_point)
+        # cv2.imshow('result of the corner detection', frame)
+        # cv2.waitKey(0)
 
         if self.flag_imshow_on == 1:
+
+            # draw circles at the corners
+            for i in range(0, res.shape[0]):
+                # I do not know why res[0, :] is the center of the image..??
+                cv2.circle(frame, (res[i, 0], res[i, 1]), 5, (0, 0, 255))
+                cv2.circle(frame, (res[i, 2], res[i, 3]), 5, (0, 255, 0))
+
+            for i in range(num_of_src_points):
+                src_point = tuple(map(tuple, src_point))
+                cv2.circle(frame, src_point[i], 5, (255, 255, 0), thickness=-1)
+
             cv2.imshow('result of the corner detection', frame)
             cv2.waitKey(0)
 
@@ -585,6 +621,11 @@ class JS_lineSegmentation:
 
         cv2.destroyAllWindows()
 
+    def myPrint(self, array):
+        array = np.array(array)
+        print('print start and shape is ', array.shape)
+        for i in range(array.shape[0]):
+            print(array[i])
 
 
 class dataLoadType:
@@ -702,7 +743,7 @@ if __name__ == "__main__":
 
     calibrate_inst = calibration()
     image_top_view = singleImageData()
-    JS_lineSegmentation_inst = JS_lineSegmentation(flag_imshow_on=1, flag_print_on=0)
+    JS_lineSegmentation_inst = JS_lineSegmentation(flag_imshow_on=1, flag_print_on=1)
     dataLoadType_inst = dataLoadType(image_top_view, calibrate_inst, JS_lineSegmentation_inst)
 
 
