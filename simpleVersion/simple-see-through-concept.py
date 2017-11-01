@@ -472,10 +472,9 @@ class JS_lineSegmentation:
             cv2.waitKey(0)
 
         # threshold
-        _, img_threshold_otsu = cv2.threshold(np.array(img_open, dtype=np.uint8), 80, 255,
-                                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # _, img_threshold_otsu = cv2.threshold(np.array(img_open, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-        _, img_threshold = cv2.threshold(img_open, 80, 255, cv2.THRESH_BINARY)
+        # _, img_threshold = cv2.threshold(img_open, 80, 255, cv2.THRESH_BINARY)
 
         imb_blur = cv2.GaussianBlur(img_open, (5, 5), 0)
         _, img_threshold_otsu_blur = cv2.threshold(np.array(imb_blur, dtype=np.uint8), 80, 255,
@@ -485,19 +484,106 @@ class JS_lineSegmentation:
             # cv2.namedWindow('img_threshold')
             # cv2.imshow('img_threshold',
             #            np.concatenate((img_threshold, img_threshold_otsu, img_threshold_otsu_blur), axis=1))
-            cv2.imshow('cv2.THRESH_BINARY', img_threshold)
-            cv2.imshow('cv2.THRESH_BINARY + cv2.THRESH_OTSU', img_threshold_otsu)
+            # cv2.imshow('cv2.THRESH_BINARY', img_threshold)
+            # cv2.imshow('cv2.THRESH_BINARY + cv2.THRESH_OTSU', img_threshold_otsu)
             cv2.imshow('cv2.THRESH_BINARY + cv2.THRESH_OTSU + blur', img_threshold_otsu_blur)
             cv2.waitKey(0)
 
         # dilate image
-        for img in [img_threshold, img_threshold_otsu, img_threshold_otsu_blur]:
-            kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (10, 10))
+        for img in [img_threshold_otsu_blur]: #img_threshold, img_threshold_otsu,
+            kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (6,6))
             img_dilate = cv2.morphologyEx(img, cv2.MORPH_DILATE, kernel_dilate)
             if self.flag_imshow_on == 1:
                 cv2.namedWindow('img_dilate')
                 cv2.imshow('img_dilate', img_dilate)
                 cv2.waitKey(0)
+
+        # harris corner detector
+        # https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_feature2d/py_features_harris/py_features_harris.html
+        dst = cv2.cornerHarris(src=np.array(img_dilate, dtype=np.float32), blockSize=10, ksize=3, k=0.1)
+        # as k is larger, detector becomes robust to noise
+        # dst has the same shape of the src.
+        ret, dst = cv2.threshold(dst, 0.01 * dst.max(), 255, 0)
+        dst = np.uint8(dst)
+
+        # find centroids
+        ret, labels, stats, centroids = cv2.connectedComponentsWithStats(dst)
+
+        # define the criteria to stop and refine the corners
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.001)
+        corners = cv2.cornerSubPix(np.array(img_dilate, dtype=np.float32), np.float32(centroids), (5, 5), (-1, -1), criteria)
+
+        # print('corner is ', corners, 'shape of the corner is ', corners.shape)
+
+        if self.flag_print_on == 1:
+            print('shape of the image', frame.shape)
+            # print('what is dst', np.sort(dst), 'shape of the dst is ', dst.shape)
+            # print('waht the fuck', dst > 0.01 * dst.max())
+
+
+        # Now draw them
+        # frame[dst > 0.01 * dst.max()] = [0, 0, 255]
+        res = np.hstack((centroids, corners))
+        res = np.int0(res)
+
+        for i in range(0, res.shape[0]):
+            # I do not know why res[0, :] is the center of the image..??
+            cv2.circle(frame, (res[i,0], res[i,1]), 5, (0,0,255))
+            cv2.circle(frame, (res[i,2], res[i,3]), 5, (0,255,0))
+
+            # print('res is ', res[i, :], 'shape of the res is ', res.shape)
+            # cv2.imshow('result of the corner detection', frame)
+            # cv2.waitKey(0)
+
+
+        if self.flag_imshow_on == 1:
+            cv2.imshow('result of the corner detection', frame)
+            cv2.waitKey(0)
+
+
+
+
+
+        # Hough Line detection
+        # https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_imgproc/py_houghlines/py_houghlines.html
+        # minLineLength = 100
+        # maxLineGap = 10
+        #
+        # edges = cv2.Canny(img_dilate, 50, 150, apertureSize=3)
+        # print('shape of the frame is ', img_dilate.shape)
+        # print('shape of the edges is ', edges.shape, 'edges is ', edges, 'max is ', np.max(edges))
+        #
+        # mask_corner = np.zeros(img_dilate.shape[::-1], dtype=np.uint8)
+        # for i in range(1, res.shape[0]):
+        #     mask_corner[res[i,2], res[i,3]] = 255
+        #
+        #lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength, maxLineGap)
+        # print('what is the fucking lines', lines, 'shape of the lines', lines.shape)
+        # for i in range(lines.shape[0]):
+        #     for x1, y1, x2, y2 in lines[i]:
+        #         cv2.line(frame, (x1, y1), (x2, y2), (255, 0, 0), thickness=10)
+        #         print('what is lines[', i, '] = ', lines[i])
+        #
+        #
+        # lines = cv2.HoughLines(edges, 1, np.pi / 180, 100)
+        # for i in range(lines.shape[0]):
+        #     for rho, theta in lines[i]:
+        #         a = np.cos(theta)
+        #         b = np.sin(theta)
+        #         x0 = a * rho
+        #         y0 = b * rho
+        #         x1 = int(x0 + 1000 * (-b))
+        #         y1 = int(y0 + 1000 * (a))
+        #         x2 = int(x0 - 1000 * (-b))
+        #         y2 = int(y0 - 1000 * (a))
+        #         cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        #
+        # if self.flag_imshow_on == 1:
+        #     cv2.imshow('canny', edges)
+        #     cv2.imshow('result of the hough transform', frame)
+        #     cv2.waitKey(0)
+
+        cv2.destroyAllWindows()
 
 
 
@@ -505,6 +591,8 @@ class dataLoadType:
 
     singleImage_inst = []
     calibrate_inst = []
+    image_top_view = []
+    JS_lineSegmentation = []
     flag_fisrt_didLoadVarDetection = 1
     flag_first_didLoadVarCalibration = 1
 
@@ -513,8 +601,8 @@ class dataLoadType:
         self.calibrate_inst = calibrate_inst
         self.bridge = CvBridge()
 
-    def __init__(self, singleImage_inst, calibrate_inst, JS_lineSegmentation_inst):
-        self.singleImage_inst = singleImage_inst
+    def __init__(self, image_top_view, calibrate_inst, JS_lineSegmentation_inst):
+        self.image_top_view = image_top_view
         self.calibrate_inst = calibrate_inst
         self.JS_lineSegmentation = JS_lineSegmentation_inst
         self.bridge = CvBridge()
@@ -542,16 +630,21 @@ class dataLoadType:
         # cv2.imshow('1.jpg', )
         # cv2.imshow('2.jpg', cv2.resize(cv2.imread(fileList[1]), dsize=(0,0), fx=0.2, fy=0.2))
         # cv2.waitKey(0)
+        self.image_top_view.saveImage(cv2.resize(cv2.imread('topview.jpg'),dsize=(0,0),fx=0.2, fy=0.2))
+        self.JS_lineSegmentation.redLineSegmentation(frame=self.image_top_view.image)
 
-        self.wrapper()
+        #self.wrapper()
 
     def loadVideoInFiles(self):
-        cap =cv2.VideoCapture('video.mp4')
+        cap =cv2.VideoCapture('video2.mp4')
 
         while(cap.isOpened()):
             ret, frame = cap.read()
-            cv2.imshow('video.jpg', frame)
-            cv2.waitKey(1)
+            self.JS_lineSegmentation.redLineSegmentation(frame=cv2.flip(src=cv2.resize(frame[0:890, :, :], dsize=(0,0), fx=0.5, fy=0.5), flipCode=-1))
+
+
+            # cv2.imshow('video.jpg', frame)
+            # cv2.waitKey(1)
 
     def callback(self, data):
         #print('come to callback function')
@@ -567,7 +660,6 @@ class dataLoadType:
 
         except CvBridgeError as e:
             print(e)
-
 
 
     def publishImage(self):
@@ -590,11 +682,11 @@ class dataLoadType:
 class singleImageData:
     height = 0
     width = 0
-    imgData = None
+    image = None
 
     def saveImage(self, img):
-        self.imgData = img
-        self.width, self.height = self.imgData.shape[:2][::-1]
+        self.image = img
+        self.width, self.height = self.image.shape[:2][::-1]
 
     def resize(self, ratio):
         #cv2.resize(self.imgData, )
@@ -610,14 +702,14 @@ if __name__ == "__main__":
 
     calibrate_inst = calibration()
     image_top_view = singleImageData()
-    JS_lineSegmentation_inst = JS_lineSegmentation(flag_imshow_on=1, flag_print_on=1)
+    JS_lineSegmentation_inst = JS_lineSegmentation(flag_imshow_on=1, flag_print_on=0)
     dataLoadType_inst = dataLoadType(image_top_view, calibrate_inst, JS_lineSegmentation_inst)
 
 
     #global flag_subscribe_new_image_not_load_old_image
     try:
-        dataLoadType_inst.loadImageInFiles()
-        #dataLoadType_inst.loadVideoInFiles()
+        #dataLoadType_inst.loadImageInFiles()
+        dataLoadType_inst.loadVideoInFiles()
 
     except KeyboardInterrupt:
         print("Shutting down")
