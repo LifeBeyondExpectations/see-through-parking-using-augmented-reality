@@ -4,6 +4,7 @@ from __future__ import print_function
 import pprint
 
 import numpy as np
+from random import randint
 import cv2
 
 from std_msgs.msg import String
@@ -456,32 +457,48 @@ class JS_lineSegmentation:
         if self.flag_imshow_on == 1:
             cv2.namedWindow('origin figure')
             cv2.imshow('origin figure', frame)
-            cv2.waitKey(1)
+            cv2.waitKey(0)
 
         # convert rgb to hsv
         img_saturation = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 1]
 
         if self.flag_imshow_on == 1:
-            cv2.namedWindow('saturation figure')
-            cv2.imshow('saturation figure', img_saturation)
-            cv2.waitKey(1)
+            cv2.namedWindow('saturation_figure')
+            cv2.imshow('saturation_figure', img_saturation)
+            cv2.waitKey(0)
 
-        # start to opening the image(morpoholgy)
-        kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
-        img_open = cv2.morphologyEx(img_saturation, cv2.MORPH_OPEN, kernel_open)
+        # # start to opening the image(morpoholgy)
+        # kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
+        # img_open = cv2.morphologyEx(img_saturation, cv2.MORPH_OPEN, kernel_open)
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('img_open')
+        #     cv2.imshow('img_open', img_open)
+        #     cv2.waitKey(0)
+        # start to closing the image(morpoholgy)
+        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
+        img_close = cv2.morphologyEx(img_saturation, cv2.MORPH_CLOSE, kernel_close)
         if self.flag_imshow_on == 1:
-            cv2.namedWindow('img_open')
-            cv2.imshow('img_open', img_open)
-            cv2.waitKey(1)
+            cv2.namedWindow('img_close')
+            cv2.imshow('img_close', img_close)
+            cv2.waitKey(0)
+
+        # dilate image
+        # for img in [img_threshold_otsu_blur]: #img_threshold, img_threshold_otsu,
+        # blur makes small noise gone
+        # kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+        # img_dilate = cv2.morphologyEx(img_close, cv2.MORPH_DILATE, kernel_dilate)
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('img_dilate')
+        #     cv2.imshow('img_dilate', img_dilate)
+        #     cv2.waitKey(0)
+        #     cv2.destroyAllWindows()
 
         # threshold
         # _, img_threshold_otsu = cv2.threshold(np.array(img_open, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
         # _, img_threshold = cv2.threshold(img_open, 80, 255, cv2.THRESH_BINARY)
-
-        imb_blur = cv2.GaussianBlur(img_open, (5, 5), 0)
+        imb_blur = cv2.GaussianBlur(img_close, (19, 19), 0)
         _, img_threshold_otsu_blur = cv2.threshold(np.array(imb_blur, dtype=np.uint8), 80, 255,
-                                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                                                   cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
         if self.flag_imshow_on == 1:
             # cv2.namedWindow('img_threshold')
@@ -489,92 +506,123 @@ class JS_lineSegmentation:
             #            np.concatenate((img_threshold, img_threshold_otsu, img_threshold_otsu_blur), axis=1))
             # cv2.imshow('cv2.THRESH_BINARY', img_threshold)
             # cv2.imshow('cv2.THRESH_BINARY + cv2.THRESH_OTSU', img_threshold_otsu)
+            cv2.namedWindow('cv2.THRESH_BINARY + cv2.THRESH_OTSU + blur')
             cv2.imshow('cv2.THRESH_BINARY + cv2.THRESH_OTSU + blur', img_threshold_otsu_blur)
-            cv2.waitKey(1)
+            cv2.waitKey(0)
 
-        # dilate image
-        for img in [img_threshold_otsu_blur]: #img_threshold, img_threshold_otsu,
-            kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (6,6))
-            img_dilate = cv2.morphologyEx(img, cv2.MORPH_DILATE, kernel_dilate)
-            if self.flag_imshow_on == 1:
-                cv2.namedWindow('img_dilate')
-                cv2.imshow('img_dilate', img_dilate)
-                cv2.waitKey(1)
-
-        # harris corner detector
-        # https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_feature2d/py_features_harris/py_features_harris.html
-        dst = cv2.cornerHarris(src=np.array(img_dilate, dtype=np.float32), blockSize=10, ksize=3, k=0.1)
-        # as k is larger, detector becomes robust to noise
-        # dst has the same shape of the src.
-        ret, dst = cv2.threshold(dst, 0.01 * dst.max(), 255, 0)
-        dst = np.uint8(dst)
-
-        # find centroids
-        ret, labels, stats, centroids = cv2.connectedComponentsWithStats(dst)
-
-        # define the criteria to stop and refine the corners
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.001)
-        corners = cv2.cornerSubPix(np.array(img_dilate, dtype=np.float32), np.float32(centroids), (5, 5), (-1, -1), criteria)
-
-        if self.flag_print_on == 1:
-            print('shape of the corner is ', corners.shape)#'corner is ', corners,
-            print('shape of the image', frame.shape)
-            # print('what is dst', np.sort(dst), 'shape of the dst is ', dst.shape)
-            # print('waht the fuck', dst > 0.01 * dst.max())
+        num_labels, img_connectedComponents = cv2.connectedComponents(image=img_threshold_otsu_blur, connectivity=8)
 
 
-        # Now draw them
-        # frame[dst > 0.01 * dst.max()] = [0, 0, 255]
-        res = np.hstack((centroids, corners, (np.arange(corners.shape[0])).reshape(-1,1)))
-        res = np.array(res, dtype=np.uint)
-        if self.flag_print_on == 1:
-            print('res is after np.array')
-            self.myPrint(res)
+        color = np.zeros((num_labels, 3), dtype=np.uint8)
 
-        res_sorted = np.array(sorted(res, key=lambda res: res[2]), dtype=np.uint)
-        #res_sorted = np.sort(res, order='x2')
-        if self.flag_print_on == 1:
-            print('sorted res is ')
-            self.myPrint(res_sorted)
+        I_need_only_one_color = [255, 0, 255]#[randint(0, 255), randint(0, 255), randint(0, 255)]
+        for i in range(num_labels):
+            color[i] = I_need_only_one_color
 
-        index_center = np.where(res_sorted[:, 4] == 0)
-        print('index_center is ')
-        self.myPrint(index_center)
-
-        # first localize the out corners. Then calculate the distance from the vector of each two outliers.
-        # left_out_courner = res_sorted[(index_center-2) ]
-
-
-        num_of_src_points = 14 * 2
-        src_point = np.zeros((num_of_src_points, 2), dtype=np.uint)
-        for i in range(num_of_src_points):
-            # half on the left side, the others in right side.
-            if i >= (num_of_src_points / 2):
-                # do not include center because it is not a corner just symbol.
-                src_point[i] = res_sorted[(i + index_center[0] - (num_of_src_points / 2) + 1), 2:(3 + 1)]
-            else:
-                src_point[i] = res_sorted[(i + index_center[0] - (num_of_src_points / 2)), 2:(3+1)]
-
-        if self.flag_print_on == 1:
-            print('src_point', src_point)
-            #self.myPrint(src_point)
-        # cv2.imshow('result of the corner detection', frame)
-        # cv2.waitKey(0)
+        img_label = np.zeros(frame.shape, dtype=np.uint8)
+        for i in range(img_label.shape[0]):
+            for j in range(img_label.shape[1]):
+                if img_connectedComponents[i, j] > 1 and img_connectedComponents[i, j] != 6:
+                    # the reason " > 1 " is that we do know want background to be labeled.
+                    img_label[i, j] = color[img_connectedComponents[i, j]]
 
         if self.flag_imshow_on == 1:
-
-            # draw circles at the corners
-            for i in range(0, res.shape[0]):
-                # I do not know why res[0, :] is the center of the image..??
-                cv2.circle(frame, (res[i, 0], res[i, 1]), 5, (0, 0, 255))
-                cv2.circle(frame, (res[i, 2], res[i, 3]), 5, (0, 255, 0))
-
-            for i in range(num_of_src_points):
-                src_point = tuple(map(tuple, src_point))
-                cv2.circle(frame, src_point[i], 5, (255, 255, 0), thickness=-1)
-
-            cv2.imshow('result of the corner detection', frame)
+            cv2.namedWindow('img_label')
+            cv2.imshow('img_label', img_label)
             cv2.waitKey(0)
+
+        # the reason is that we do know want background, red lines, non-parking area(label = 6) to be labeled.
+        num_labels = num_labels - 3
+
+        if self.flag_print_on == 1:
+            print('what is the result', np.shape(img_connectedComponents), 'max is ',
+                  np.max(img_connectedComponents))
+            print('num_labels is ', num_labels)
+
+        #alpha blending
+        alpha = 0.5
+        frame = cv2.addWeighted(src1=frame, alpha=alpha, src2=img_label, beta=(1-alpha), gamma=0.0,
+                                        dst=None, dtype=-1)
+        if self.flag_imshow_on == 1:
+            cv2.namedWindow(str('alphaBlended alpha = ' + str(alpha)))
+            cv2.imshow(str('alphaBlended alpha = ' + str(alpha)), frame)
+            cv2.waitKey(0)
+
+        return frame
+        # # harris corner detector
+        # # https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_feature2d/py_features_harris/py_features_harris.html
+        # dst = cv2.cornerHarris(src=np.array(img_dilate, dtype=np.float32), blockSize=10, ksize=3, k=0.1)
+        # # as k is larger, detector becomes robust to noise
+        # # dst has the same shape of the src.
+        # ret, dst = cv2.threshold(dst, 0.01 * dst.max(), 255, 0)
+        # dst = np.uint8(dst)
+        #
+        # # find centroids
+        # ret, labels, stats, centroids = cv2.connectedComponentsWithStats(dst)
+        #
+        # # define the criteria to stop and refine the corners
+        # criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.001)
+        # corners = cv2.cornerSubPix(np.array(img_dilate, dtype=np.float32), np.float32(centroids), (5, 5), (-1, -1), criteria)
+        #
+        # if self.flag_print_on == 1:
+        #     print('shape of the corner is ', corners.shape)#'corner is ', corners,
+        #     print('shape of the image', frame.shape)
+        #     # print('what is dst', np.sort(dst), 'shape of the dst is ', dst.shape)
+        #     # print('waht the fuck', dst > 0.01 * dst.max())
+        #
+        #
+        # # Now draw them
+        # # frame[dst > 0.01 * dst.max()] = [0, 0, 255]
+        # res = np.hstack((centroids, corners, (np.arange(corners.shape[0])).reshape(-1,1)))
+        # res = np.array(res, dtype=np.uint)
+        # if self.flag_print_on == 1:
+        #     print('res is after np.array')
+        #     self.myPrint(res)
+        #
+        # res_sorted = np.array(sorted(res, key=lambda res: res[2]), dtype=np.uint)
+        # #res_sorted = np.sort(res, order='x2')
+        # if self.flag_print_on == 1:
+        #     print('sorted res is ')
+        #     self.myPrint(res_sorted)
+        #
+        # index_center = np.where(res_sorted[:, 4] == 0)
+        # print('index_center is ')
+        # self.myPrint(index_center)
+        #
+        # # first localize the out corners. Then calculate the distance from the vector of each two outliers.
+        # # left_out_courner = res_sorted[(index_center-2) ]
+        #
+        #
+        # num_of_src_points = 14 * 2
+        # src_point = np.zeros((num_of_src_points, 2), dtype=np.uint)
+        # for i in range(num_of_src_points):
+        #     # half on the left side, the others in right side.
+        #     if i >= (num_of_src_points / 2):
+        #         # do not include center because it is not a corner just symbol.
+        #         src_point[i] = res_sorted[(i + index_center[0] - (num_of_src_points / 2) + 1), 2:(3 + 1)]
+        #     else:
+        #         src_point[i] = res_sorted[(i + index_center[0] - (num_of_src_points / 2)), 2:(3+1)]
+        #
+        # if self.flag_print_on == 1:
+        #     print('src_point', src_point)
+        #     #self.myPrint(src_point)
+        # # cv2.imshow('result of the corner detection', frame)
+        # # cv2.waitKey(0)
+        #
+        # if self.flag_imshow_on == 1:
+        #
+        #     # draw circles at the corners
+        #     for i in range(0, res.shape[0]):
+        #         # I do not know why res[0, :] is the center of the image..??
+        #         cv2.circle(frame, (res[i, 0], res[i, 1]), 5, (0, 0, 255))
+        #         cv2.circle(frame, (res[i, 2], res[i, 3]), 5, (0, 255, 0))
+        #
+        #     for i in range(num_of_src_points):
+        #         src_point = tuple(map(tuple, src_point))
+        #         cv2.circle(frame, src_point[i], 5, (255, 255, 0), thickness=-1)
+        #
+        #     cv2.imshow('result of the corner detection', frame)
+        #     cv2.waitKey(0)
 
 
 
@@ -619,7 +667,6 @@ class JS_lineSegmentation:
         #     cv2.imshow('result of the hough transform', frame)
         #     cv2.waitKey(0)
 
-        cv2.destroyAllWindows()
 
     def myPrint(self, array):
         array = np.array(array)
@@ -668,9 +715,6 @@ class dataLoadType:
         num_of_image_in_database = len(fileList)
         print('what is fileList', fileList, '\n')
 
-        # self.image_top_view.saveImage(cv2.resize(cv2.imread('topview.jpg'),dsize=(0,0),fx=0.2, fy=0.2))
-        # self.JS_lineSegmentation.redLineSegmentation(frame=self.image_top_view.image)
-
         self.wrapper()
 
     def loadVideoInFiles(self):
@@ -699,7 +743,6 @@ class dataLoadType:
         except CvBridgeError as e:
             print(e)
 
-
     def publishImage(self):
         # http://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscriber%28python%29
         print('start to publish JS image')
@@ -708,15 +751,20 @@ class dataLoadType:
         rate = rospy.Rate(10)  # 10Hz
 
     def wrapper(self):
-        #homography test
-        image_src_homography = self.calibrate_inst.homography(image_src=cv2.resize(cv2.imread('src.jpg'), dsize=(0,0), fx=0.2, fy=0.2))
-        self.calibrate_inst.alphaBlending(image_src=image_src_homography, image_dst=cv2.resize(cv2.imread('dst.jpg'), dsize=(0,0), fx=0.2, fy=0.2), alpha=0.4)
+        # #homography test
+        # image_src_homography = self.calibrate_inst.homography(image_src=cv2.resize(cv2.imread('src.jpg'), dsize=(0,0), fx=0.2, fy=0.2))
+        # self.calibrate_inst.alphaBlending(image_src=image_src_homography, image_dst=cv2.resize(cv2.imread('dst.jpg'), dsize=(0,0), fx=0.2, fy=0.2), alpha=0.4)
 
         #parking spot detection test
-        #self.JS_lineSegmentation.whiteLineSegmentation(frame=cv2.resize(cv2.imread('src.jpg'), dsize=(0,0), fx=0.2, fy=0.2))
+        # self.JS_lineSegmentation.whiteLineSegmentation(frame=cv2.resize(cv2.imread('src.jpg'),
+        #  dsize=(0,0), fx=0.2, fy=0.2))
 
-        # self.JS_lineSegmentation.redLineSegmentation(
-        #     frame=cv2.resize(cv2.imread('src.jpg'), dsize=(0, 0), fx=0.2, fy=0.2))
+        frame = self.JS_lineSegmentation.redLineSegmentation(
+            frame=cv2.resize(cv2.imread('src.jpg'), dsize=(0, 0), fx=0.2, fy=0.2))
+        image_homography = self.calibrate_inst.homography(image_src=frame)
+        self.calibrate_inst.alphaBlending(image_src=image_homography,
+                                          image_dst=cv2.resize(cv2.imread('dst.jpg'), dsize=(0, 0), fx=0.2,
+                                                               fy=0.2), alpha=0.4)
 
 class singleImageData:
     height = 0
