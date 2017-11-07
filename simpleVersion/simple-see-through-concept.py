@@ -21,7 +21,7 @@ import os
 
 
 #parameter
-path_image_database = '*.jpg'
+path_image_database = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/simpleVersion/*.jpg'
 
 
 #flag
@@ -668,13 +668,10 @@ class dataLoadType:
         num_of_image_in_database = len(fileList)
         print('what is fileList', fileList, '\n')
 
-        # cv2.imshow('1.jpg', )
-        # cv2.imshow('2.jpg', cv2.resize(cv2.imread(fileList[1]), dsize=(0,0), fx=0.2, fy=0.2))
-        # cv2.waitKey(0)
-        self.image_top_view.saveImage(cv2.resize(cv2.imread('topview.jpg'),dsize=(0,0),fx=0.2, fy=0.2))
-        self.JS_lineSegmentation.redLineSegmentation(frame=self.image_top_view.image)
+        # self.image_top_view.saveImage(cv2.resize(cv2.imread('topview.jpg'),dsize=(0,0),fx=0.2, fy=0.2))
+        # self.JS_lineSegmentation.redLineSegmentation(frame=self.image_top_view.image)
 
-        #self.wrapper()
+        self.wrapper()
 
     def loadVideoInFiles(self):
         cap =cv2.VideoCapture('video2.mp4')
@@ -684,8 +681,8 @@ class dataLoadType:
             self.JS_lineSegmentation.redLineSegmentation(frame=cv2.flip(src=cv2.resize(frame[0:890, :, :], dsize=(0,0), fx=0.5, fy=0.5), flipCode=-1))
 
 
-            # cv2.imshow('video.jpg', frame)
-            # cv2.waitKey(1)
+            cv2.imshow('video.jpg', frame)
+            cv2.waitKey(1)
 
     def callback(self, data):
         #print('come to callback function')
@@ -712,13 +709,14 @@ class dataLoadType:
 
     def wrapper(self):
         #homography test
-        #image_src_homography = self.calibrate_inst.homography(image_src=cv2.resize(cv2.imread('src.jpg'), dsize=(0,0), fx=0.2, fy=0.2))
-        #self.calibrate_inst.alphaBlending(image_src=image_src_homography, image_dst=cv2.resize(cv2.imread('dst.jpg'), dsize=(0,0), fx=0.2, fy=0.2), alpha=0.2)
+        image_src_homography = self.calibrate_inst.homography(image_src=cv2.resize(cv2.imread('src.jpg'), dsize=(0,0), fx=0.2, fy=0.2))
+        self.calibrate_inst.alphaBlending(image_src=image_src_homography, image_dst=cv2.resize(cv2.imread('dst.jpg'), dsize=(0,0), fx=0.2, fy=0.2), alpha=0.4)
 
         #parking spot detection test
         #self.JS_lineSegmentation.whiteLineSegmentation(frame=cv2.resize(cv2.imread('src.jpg'), dsize=(0,0), fx=0.2, fy=0.2))
-        self.JS_lineSegmentation.redLineSegmentation(
-            frame=cv2.resize(cv2.imread('src.jpg'), dsize=(0, 0), fx=0.2, fy=0.2))
+
+        # self.JS_lineSegmentation.redLineSegmentation(
+        #     frame=cv2.resize(cv2.imread('src.jpg'), dsize=(0, 0), fx=0.2, fy=0.2))
 
 class singleImageData:
     height = 0
@@ -749,8 +747,8 @@ if __name__ == "__main__":
 
     #global flag_subscribe_new_image_not_load_old_image
     try:
-        #dataLoadType_inst.loadImageInFiles()
-        dataLoadType_inst.loadVideoInFiles()
+        dataLoadType_inst.loadImageInFiles()
+        # dataLoadType_inst.loadVideoInFiles()
 
     except KeyboardInterrupt:
         print("Shutting down")
