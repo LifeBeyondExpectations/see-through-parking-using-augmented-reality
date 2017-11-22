@@ -20,6 +20,7 @@ import os
 
 # flag
 flag_1_subscribeImg_2_loadImgFile = 2
+flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg = 3
 flag_publishImg = 0
 
 flag_saveImg = 1
@@ -36,8 +37,22 @@ flag_print = 1
 
 # parameter
 ROS_TOPIC = 'remote/image_color/compressed'
-path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView/*.png'
-path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/'
+
+
+
+#non-fisheye
+path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
+path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
+kernelSize_close = (50, 50)
+kernelSize_open = (30, 30)
+
+#fisheye
+# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
+# path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
+# kernelSize_close = (30, 30)
+# kernelSize_open = (10, 10)
+
+
 
 nameOf_pickle_Checkerboard_Detection = 'detect_result_jaesung_171021_1600_delete_files.pickle'
 path_pickle_calibration_variable = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/calib_result_JS_fisheye.pickle'
@@ -86,6 +101,652 @@ class calibClass:
 
         return frame_homography_RANSAC  # frame_homography_JS
 
+class lineSegClass:
+    flag_imshow_on = 0
+    flag_print_on = 0
+    def __init__(self, flag_imshow_on, flag_print_on):
+        self.flag_imshow_on = flag_imshow_on
+        self.flag_print_on = flag_print_on
+
+    def whiteLineSegmentation(self, frame):
+
+        # print('shape of the frame is ', np.shape(frame))
+        frame = cv2.resize(frame, (1062, 598))
+
+        if self.flag_imshow_on == 1:
+            cv2.namedWindow('origin_figure')
+            cv2.imshow('origin_figure', frame)
+            cv2.waitKey(0)
+
+        #convert rgb to hsv
+        img_hue = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2]
+
+        if self.flag_imshow_on == 1:
+            cv2.namedWindow('hue figure')
+            cv2.imshow('hue figure', img_hue)
+            cv2.waitKey(0)
+
+        #start to opening the image(morpoholgy)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
+        #np.zeros((300, img_hue.shape[1]), dtype=np.uint8)
+        img_open = cv2.morphologyEx(img_hue, cv2.MORPH_OPEN, kernel)
+        print('dtype check', img_open.dtype)
+        if self.flag_imshow_on == 1:
+            cv2.namedWindow('img_open')
+            cv2.imshow('img_open', img_open)
+            print('max of img_open is ', np.max(img_open))
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        img_sub = np.zeros(img_hue.shape, dtype=np.uint8)
+        for i in range(0, img_hue.shape[0]):
+            for j in range(0, img_hue.shape[1]):
+                if img_hue[i, j] < img_open[i, j]:
+                    img_sub[i, j] = 0
+                else:
+                    img_sub[i, j] = img_hue[i, j] - img_open[i, j]
+
+        if self.flag_imshow_on == 1:
+            cv2.namedWindow('img_sub')
+            cv2.imshow('img_sub', img_sub)
+            cv2.waitKey(0)
+        if self.flag_print_on == 2:
+            print('shape of the img_sub is ', img_sub.shape)
+
+        # start to closing the image(morpoholgy)
+        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
+        img_close = cv2.morphologyEx(img_sub, cv2.MORPH_OPEN, kernel_close)
+        if self.flag_imshow_on == 1:
+            cv2.namedWindow('img_close')
+            cv2.imshow('img_close', img_close)
+            cv2.waitKey(0)
+
+        img_sub = img_close
+        # #column wise threshold
+        # img_col_wise_otsu_threshold = np.zeros(img_sub.shape, dtype=np.uint8)
+        # img_col_wise_adoptive_threshold = np.zeros(img_sub.shape, dtype=np.uint8)
+        #
+        # for col in range(img_col_wise_otsu_threshold.shape[1]):
+        #
+        #     _, tmp = cv2.threshold(np.array(img_sub[:, col], dtype=np.uint8), 200, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        #     img_col_wise_otsu_threshold[:, col] = tmp.reshape(1, img_sub.shape[0])
+        #
+        #     img_col_wise_adoptive_threshold = cv2.adaptiveThreshold(np.array(img_sub, dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 2)
+        #
+        # if self.flag_imshow_on == 1:
+        #     cv2.imshow('img_row_wise_otsu_threshold', np.concatenate((img_col_wise_otsu_threshold, img_col_wise_adoptive_threshold), axis=1))
+        #     cv2.waitKey(0)
+        #
+        #     # start to opening the image(morpoholgy)
+        #     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (6, 6))
+        #     # np.zeros((300, img_hue.shape[1]), dtype=np.uint8)
+        #     img_col_wise_adoptive_threshold = cv2.morphologyEx(img_col_wise_adoptive_threshold, cv2.MORPH_OPEN, kernel)
+        #
+        #     if self.flag_imshow_on == 1:
+        #         cv2.namedWindow('img_col_wise_adoptive_threshold_opened')
+        #         cv2.imshow('img_col_wise_adoptive_threshold_opened', img_col_wise_adoptive_threshold)
+        #         cv2.waitKey(0)
+
+        #original
+        _, img_threshold = cv2.threshold(img_sub, 40, 255, cv2.THRESH_BINARY)
+
+        _, img_threshold_otsu = cv2.threshold(np.array(img_sub, dtype=np.uint8), 10, 255,
+                                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        imb_blur = cv2.GaussianBlur(img_sub, (5, 5), 0)
+        _, img_threshold_otsu_blur = cv2.threshold(np.array(imb_blur, dtype=np.uint8), 30, 255,
+                                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # # split -> otsh -> merge
+        # middle_row = (img_sub.shape[0] // 2)
+        # middle_col = (img_sub.shape[1] // 2)
+        #
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('img_sub_otsu_1')
+        #     cv2.imshow('img_sub_otsu_1', img_sub)
+        #     cv2.waitKey(0)
+        #
+        # _, img_split_otsu = cv2.threshold(np.array(img_sub[:middle_row, :middle_col], dtype=np.uint8), 10, 255,
+        #                                       cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # img_sub[:middle_row, :middle_col] = img_split_otsu
+        #
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('img_sub_otsu_2')
+        #     cv2.imshow('img_sub_otsu_2', img_sub)
+        #     cv2.waitKey(0)
+        #
+        # _, img_split_otsu = cv2.threshold(np.array(img_sub[middle_row:, :middle_col], dtype=np.uint8), 10, 255,
+        #                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # img_sub[middle_row:, :middle_col] = img_split_otsu
+        #
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('img_sub_otsu_3')
+        #     cv2.imshow('img_sub_otsu_3', img_sub)
+        #     cv2.waitKey(0)
+        #
+        # _, img_split_otsu = cv2.threshold(np.array(img_sub[:middle_row, middle_col:], dtype=np.uint8), 10, 255,
+        #                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # img_sub[:middle_row, middle_col:] = img_split_otsu
+        #
+        # _, img_split_otsu = cv2.threshold(np.array(img_sub[middle_row:, middle_col:], dtype=np.uint8), 10, 255,
+        #                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # img_sub[middle_row:, middle_col:] = img_split_otsu
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('img_sub_otsu')
+        #     cv2.imshow('img_sub_otsu', img_sub)
+        #     cv2.waitKey(0)
+
+
+
+
+
+
+        # img_adaptive_threshold_mean = cv2.adaptiveThreshold(np.array(img_sub, dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+        #                                                     cv2.THRESH_BINARY_INV, 11 ,2)
+        # img_adaptive_threshold_gaussian = cv2.adaptiveThreshold(np.array(img_sub, dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        #                                                cv2.THRESH_BINARY_INV, 19, 2)
+
+        #fucking code
+        img_threshold_otsu[496:, :] = np.zeros((img_threshold_otsu.shape[0] - 496, img_threshold_otsu.shape[1]), dtype=np.uint8)
+        img_threshold_otsu[317:440, 685:885] = np.zeros((123, 200), dtype=np.uint8)
+        img_threshold_otsu[358:388, 896:934] = np.zeros((388 - 358, 934 - 896), dtype=np.uint8)
+
+        img_whiteLine = np.zeros(img_threshold_otsu.shape, dtype=np.uint8)
+
+        for i in range(img_threshold_otsu.shape[0]):
+            for j in range(img_threshold_otsu.shape[1]):
+
+                # copy the white line area
+                img_whiteLine[i, j] = img_threshold_otsu[i, j]
+
+                # Thresh_INV
+                if img_threshold_otsu[i, j] == 0:
+                    img_threshold_otsu[i, j] = 255
+                else:
+                    img_threshold_otsu[i ,j] = 0
+
+
+        if self.flag_imshow_on == 1:
+            # cv2.namedWindow('img_threshold')
+            # cv2.imshow('img_threshold',
+            #            np.concatenate((img_threshold, img_threshold_otsu, img_threshold_otsu_blur), axis=1))
+            # img_adaptive_threshold_mean, img_adaptive_threshold_gaussian
+            cv2.namedWindow('img_threshold_otsu')
+            cv2.imshow('img_threshold_otsu', img_threshold_otsu)
+            cv2.waitKey(0)
+
+        # connected compnent labeling
+        num_labels, img_connectedComponents = cv2.connectedComponents(image=img_threshold_otsu,
+                                                                      connectivity=8)
+        color = np.zeros((num_labels, 3), dtype=np.uint8)
+        I_need_only_one_color = [180,180,0]  # [randint(0, 255), randint(0, 255), randint(0, 255)]
+        for i in range(num_labels):
+            color[i] = I_need_only_one_color
+
+        img_label = np.zeros(frame.shape, dtype=np.uint8)
+        for i in range(img_label.shape[0]):
+            for j in range(img_label.shape[1]):
+                if img_connectedComponents[i, j] > 1:# and img_connectedComponents[i, j] != 5:
+                    # the reason " > 1 " is that we do know want background to be labeled.
+                    img_label[i, j] = color[img_connectedComponents[i, j]]
+                elif img_whiteLine[i, j] == 255:
+                    img_label[i, j] = np.array([0, 255, 255], dtype=np.uint8)
+
+        if self.flag_imshow_on == 1:
+            cv2.namedWindow('img_label')
+            cv2.imshow('img_label', img_label)
+            cv2.waitKey(0)
+
+        # the reason is that we do know want background, red lines, non-parking area(label = 6) to be labeled.
+        num_labels = num_labels - 3
+
+        if self.flag_print_on == 1:
+            print('what is the result', np.shape(img_connectedComponents), 'max is ',
+                  np.max(img_connectedComponents))
+            print('num_labels is ', num_labels)
+
+        return img_label #img_threshold_otsu
+
+    def redLineSegmentation(self, frame):
+
+        if self.flag_imshow_on == 2:
+            cv2.namedWindow('origin figure')
+            cv2.imshow('origin figure', frame)
+            cv2.waitKey(1)
+
+
+        ##################################################################################
+
+        # convert rgb to hsv
+        # img_hue = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 0]
+
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('hue_figure')
+        #     cv2.imshow('hue_figure', img_hue)
+        #     cv2.waitKey(0)
+
+        img_saturation = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 1]
+
+        if self.flag_imshow_on == 2:
+            cv2.namedWindow('saturation_figure')
+            cv2.imshow('saturation_figure', img_saturation)
+            cv2.waitKey(1)
+
+        # img_value = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2]
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('value_figure')
+        #     cv2.imshow('value_figure', img_value)
+        #     cv2.waitKey(0)
+
+        ##################################################################################
+
+
+
+
+
+
+
+
+        ###############################                                    ################################
+
+        # # threshold
+        # # _, img_threshold_otsu = cv2.threshold(np.array(img_open, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # _, img_threshold = cv2.threshold(img_saturation, 80, 255, cv2.THRESH_BINARY)
+        # # imb_blur = cv2.GaussianBlur(img_close, (19, 19), 0)
+        # # _, img_threshold_otsu_blur = cv2.threshold(np.array(imb_blur, dtype=np.uint8), 80, 255,
+        # #                                            cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('cv2.THRESH_BINARY')
+        #     cv2.imshow('cv2.THRESH_BINARY', img_threshold)
+        #     cv2.waitKey(0)
+        #
+        #
+        #
+        #
+        #
+        # # # start to opening the image(morpoholgy)
+        # kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
+        # img_open = cv2.morphologyEx(img_saturation, cv2.MORPH_OPEN, kernel_open)
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('img_open')
+        #     cv2.imshow('img_open', img_open)
+        #     cv2.waitKey(0)
+        #
+        # # threshold
+        # # _, img_threshold_otsu = cv2.threshold(np.array(img_open, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # _, img_threshold = cv2.threshold(img_open, 80, 255, cv2.THRESH_BINARY)
+        # # imb_blur = cv2.GaussianBlur(img_close, (19, 19), 0)
+        # # _, img_threshold_otsu_blur = cv2.threshold(np.array(imb_blur, dtype=np.uint8), 80, 255,
+        # #                                            cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('cv2.THRESH_BINARY img_open')
+        #     cv2.imshow('cv2.THRESH_BINARY img_open', img_threshold)
+        #     cv2.waitKey(0)
+
+
+
+
+
+        # start to closing the image(morpoholgy)
+        global kernelSize_close
+        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, kernelSize_close)
+        img_close = cv2.morphologyEx(img_saturation, cv2.MORPH_CLOSE, kernel_close)
+        if self.flag_imshow_on == 2:
+            cv2.namedWindow('img_close (30, 30)')
+            cv2.imshow('img_close (30, 30)', img_close)
+            cv2.waitKey(0)
+
+        # threshold
+        # _, img_threshold_otsu = cv2.threshold(np.array(img_close, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        _, img_threshold = cv2.threshold(img_close, 80, 255, cv2.THRESH_BINARY)
+        if self.flag_imshow_on == 2:
+            cv2.namedWindow('cv2.THRESH_BINARY')
+            cv2.imshow('cv2.THRESH_BINARY', img_threshold)
+            cv2.waitKey(0)
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('cv2.THRESH_BINARY_OTSU img_close (30, 30)')
+        #     cv2.imshow('cv2.THRESH_BINARY_OTSU img_close (30, 30)', img_threshold_otsu)
+        #     cv2.waitKey(0)
+
+
+        ###############################                                    ################################
+
+
+
+
+
+
+        # start to opening the image(morpoholgy)
+        # for i in [5, 10, 15, 20]:
+        #     kernel_size = (i, i)
+        #     kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, kernel_size)
+        #     img_open = cv2.morphologyEx(img_threshold, cv2.MORPH_OPEN, kernel_open)
+        #     if self.flag_imshow_on == 1:
+        #         cv2.namedWindow('img_open' + str(kernel_size))
+        #         cv2.imshow('img_open' + str(kernel_size), img_open)
+        #         cv2.waitKey(0)
+        global kernelSize_open
+        kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, kernelSize_open)
+        img_open = cv2.morphologyEx(img_threshold, cv2.MORPH_OPEN, kernel_open)
+        if self.flag_imshow_on == 2:
+            cv2.namedWindow('img_open' + str(kernelSize_open))
+            cv2.imshow('img_open' + str(kernelSize_open), img_open)
+            cv2.waitKey(1)
+
+        global flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg
+        if flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 1 or flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 2:
+            if self.flag_imshow_on == 1:
+                cv2.namedWindow('redLineSeg')
+                cv2.imshow('redLineSeg', np.concatenate((frame[:, :, 1], img_open), axis=1))
+                cv2.waitKey(1)
+            return img_open
+
+        elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 3:
+            #connected compnent labeling
+            num_labels, img_connectedComponents, stat, centroid = cv2.connectedComponentsWithStats(image=img_open, connectivity=8, ltype=cv2.CV_16U)
+
+            # print('num_labels are', num_labels)
+            # print('stat is ', stat)
+            # print('centroid is ', centroid)
+
+
+            ###################################################################################################################################################
+
+            # for label in range(1, num_labels): #label == 0 is background
+            #     cv2.circle(frame, tuple(np.array(centroid[label, :], np.uint16)), radius=10, color=(255, 0, 150), thickness=3)
+            #
+            #     for i in range(frame.shape[0]): #shape = [height, width, depth]
+            #         if img_connectedComponents[i, stat[label, 0]] == label:
+            #             left_front_pixel = (stat[label, 0], i) # [height, widht] -> (widht, height)
+            #             break
+            #
+            #     for j in range(frame.shape[1]): #shape = [height, width, depth]
+            #         if img_connectedComponents[stat[label, 1], j] == label:
+            #             right_front_pixel = (j, stat[label, 1])
+            #             break
+            #
+            #     centroid_front_pixel = ((left_front_pixel[0] + right_front_pixel[0])//2, (left_front_pixel[1] + right_front_pixel[1])//2)
+            # https: // docs.opencv.org / 3.0 - beta / modules / imgproc / doc / drawing_functions.html
+            #     cv2.arrowedLine(img=frame, pt1=tuple(np.array(centroid[label, :], np.uint16)), pt2=centroid_front_pixel, color=(255, 255, 50), thickness=3) #, line_type=None, shift=None, tipLength=None
+            #     cv2.circle(frame, left_front_pixel, radius=10, color=(0, 255, 255), thickness=3) #bgr type
+            #     cv2.circle(frame, right_front_pixel, radius=10, color=(0, 0, 255), thickness=3)
+
+            # https://docs.opencv.org/3.1.0/dd/d49/tutorial_py_contour_features.html
+            # https://docs.opencv.org/3.1.0/d3/dc0/group__imgproc__shape.html#ga17ed9f5d79ae97bd4c7cf18403e1689a
+            # https://stackoverflow.com/questions/25504964/opencv-python-valueerror-too-many-values-to-unpack
+            _, contours, _ = cv2.findContours(image=img_open, mode=1, method=2) #, hierarchy
+            cnt = contours[0]
+            rect = cv2.minAreaRect(cnt)
+            box = cv2.boxPoints(rect)
+            box = np.int0(box)
+            cv2.drawContours(frame, [box], 0, (0, 0, 255), 2)
+
+            boxColor = ((0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255), (255, 255, 0))
+            for i in range(box.shape[0]):
+                cv2.circle(frame, tuple(box[i]), radius=10, color=tuple(boxColor[i]), thickness=3)
+
+
+
+
+
+            # for label in range(1, num_labels):  # label == 0 is background
+            #     cv2.circle(frame, tuple(np.array(centroid[label, :], np.uint16)), radius=10, color=(255, 0, 150), thickness=3)
+            #
+            #     origin_of_arrow = tuple(np.array(centroid[label, :], np.uint16))
+            #     end_of_arrow = (origin_of_arrow[0] + stat[label, 2], origin_of_arrow[1] + stat[label, 3])
+            #     cv2.arrowedLine(img=frame, pt2=origin_of_arrow, pt1=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
+            #     cv2.circle(frame, origin_of_arrow, radius=10, color=(0, 255, 255), thickness=3)  # bgr type
+            #     cv2.circle(frame, end_of_arrow, radius=10, color=(0, 0, 255), thickness=3)
+
+
+
+
+
+            # dst = cv2.cornerHarris(src=np.array(img_open, dtype=np.float32), blockSize=20, ksize=21, k=0.1)
+            # # find centroids
+            # frame[dst > 0.01 * dst.max()] = [0, 0, 255]
+
+
+
+
+            # cv2.cornerEigenValsAndVecs
+            # dst = cv2.cornerHarris(src=np.array(img_open, dtype=np.float32), blockSize=20, ksize=21, k=0.1)
+            # # dst = cv2.dilate(dst, None)
+            # ret, dst = cv2.threshold(dst, 0.01 * dst.max(), 255, 0)
+            # dst = np.uint8(dst)
+            #
+            # # find centroids
+            # ret, labels, stats, centroids = cv2.connectedComponentsWithStats(np.array(dst, np.uint8))
+            #
+            # # define the criteria to stop and refine the corners
+            # criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.001)
+            # corners = cv2.cornerSubPix(img_open, np.float32(centroids), (5, 5), (-1, -1), criteria)
+            #
+            # # Now draw them
+            # res = np.hstack((centroids, corners))
+            # res = np.int0(res)
+            #
+            # for corner in range(res.shape[0]):
+            #     cv2.circle(frame, (res[corner, 0], res[corner, 1]), radius=3, color=(0, 0, 255), thickness=3)
+            #     cv2.circle(frame, (res[corner, 2], res[corner, 3]), radius=3, color=(0, 255, 0), thickness=3)
+            # # frame[res[:, 1], res[:, 0]] = [0, 0, 255]
+            # # frame[res[:, 3], res[:, 2]] = [0, 255, 0]
+
+
+
+
+            ###################################################################################################################################################
+
+
+            if self.flag_imshow_on == 1:
+                cv2.namedWindow('redLineSeg')
+                # cv2.imshow('redLineSeg', np.concatenate((frame[:, :, 1], img_open), axis=1))
+                cv2.imshow('redLineSeg', np.concatenate((frame[:, :, 1], img_open), axis=1))
+                cv2.waitKey(1)
+
+            return frame
+
+    def fuck(self):
+
+        # dilate image
+        # for img in [img_threshold_otsu_blur]: #img_threshold, img_threshold_otsu,
+        # blur makes small noise gone
+        # kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+        # img_dilate = cv2.morphologyEx(img_close, cv2.MORPH_DILATE, kernel_dilate)
+        # if self.flag_imshow_on == 1:
+        #     cv2.namedWindow('img_dilate')
+        #     cv2.imshow('img_dilate', img_dilate)
+        #     cv2.waitKey(0)
+        #     cv2.destroyAllWindows()
+
+
+
+        # threshold
+        # _, img_threshold_otsu = cv2.threshold(np.array(img_open, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # _, img_threshold = cv2.threshold(img_open, 80, 255, cv2.THRESH_BINARY)
+        imb_blur = cv2.GaussianBlur(img_close, (19, 19), 0)
+        _, img_threshold_otsu_blur = cv2.threshold(np.array(imb_blur, dtype=np.uint8), 80, 255,
+                                                   cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+        if self.flag_imshow_on == 1:
+            # cv2.namedWindow('img_threshold')
+            # cv2.imshow('img_threshold',
+            #            np.concatenate((img_threshold, img_threshold_otsu, img_threshold_otsu_blur), axis=1))
+            # cv2.imshow('cv2.THRESH_BINARY', img_threshold)
+            # cv2.imshow('cv2.THRESH_BINARY + cv2.THRESH_OTSU', img_threshold_otsu)
+            cv2.namedWindow('cv2.THRESH_BINARY + cv2.THRESH_OTSU + blur')
+            cv2.imshow('cv2.THRESH_BINARY + cv2.THRESH_OTSU + blur', img_threshold_otsu_blur)
+            cv2.waitKey(0)
+
+        num_labels, img_connectedComponents = cv2.connectedComponents(image=img_threshold_otsu_blur, connectivity=8)
+
+
+        color = np.zeros((num_labels, 3), dtype=np.uint8)
+
+        I_need_only_one_color = [255, 0, 255]#[randint(0, 255), randint(0, 255), randint(0, 255)]
+        for i in range(num_labels):
+            color[i] = I_need_only_one_color
+
+        img_label = np.zeros(frame.shape, dtype=np.uint8)
+        for i in range(img_label.shape[0]):
+            for j in range(img_label.shape[1]):
+                if img_connectedComponents[i, j] > 1 and img_connectedComponents[i, j] != 6:
+                    # the reason " > 1 " is that we do know want background to be labeled.
+                    img_label[i, j] = color[img_connectedComponents[i, j]]
+
+        if self.flag_imshow_on == 1:
+            cv2.namedWindow('img_label')
+            cv2.imshow('img_label', img_label)
+            cv2.waitKey(0)
+
+        # the reason is that we do know want background, red lines, non-parking area(label = 6) to be labeled.
+        num_labels = num_labels - 3
+
+        if self.flag_print_on == 1:
+            print('what is the result', np.shape(img_connectedComponents), 'max is ',
+                  np.max(img_connectedComponents))
+            print('num_labels is ', num_labels)
+
+        #alpha blending
+        alpha = 0.5
+        frame = cv2.addWeighted(src1=frame, alpha=alpha, src2=img_label, beta=(1-alpha), gamma=0.0,
+                                        dst=None, dtype=-1)
+        if self.flag_imshow_on == 1:
+            cv2.namedWindow(str('alphaBlended alpha = ' + str(alpha)))
+            cv2.imshow(str('alphaBlended alpha = ' + str(alpha)), frame)
+            cv2.waitKey(0)
+
+        return frame
+
+    def cornerDetect(self, frame, mask=None):
+        print('>> into the corenrDetect')
+        # harris corner detector
+        # https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_feature2d/py_features_harris/py_features_harris.html
+        print('type of the source is', frame.dtype, 'shape is ', frame.shape)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        dst = cv2.cornerHarris(src=np.array(gray, dtype=np.float32), blockSize=10, ksize=3, k=0.1)
+        # as k is larger, detector becomes robust to noise
+        # dst has the same shape of the src.
+        ret, dst = cv2.threshold(dst, 0.01 * dst.max(), 255, 0)
+        dst = np.uint8(dst)
+
+        # find centroids
+        ret, labels, stats, centroids = cv2.connectedComponentsWithStats(dst)
+
+        # define the criteria to stop and refine the corners
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.001)
+        corners = cv2.cornerSubPix(np.array(gray, dtype=np.float32), np.float32(centroids), (5, 5), (-1, -1), criteria)
+
+        if self.flag_print_on == 1:
+            print('shape of the corner is ', corners.shape)#'corner is ', corners,
+            print('shape of the image', frame.shape)
+            # print('what is dst', np.sort(dst), 'shape of the dst is ', dst.shape)
+            # print('waht the fuck', dst > 0.01 * dst.max())
+
+
+        # Now draw them
+        # frame[dst > 0.01 * dst.max()] = [0, 0, 255]
+        res = np.hstack((centroids, corners, (np.arange(corners.shape[0])).reshape(-1,1)))
+        res = np.array(res, dtype=np.uint)
+        if self.flag_print_on == 1:
+            print('res is after np.array')
+            self.myPrint(res)
+
+        res_sorted = np.array(sorted(res, key=lambda res: res[2]), dtype=np.uint)
+        #res_sorted = np.sort(res, order='x2')
+        if self.flag_print_on == 1:
+            print('sorted res is ')
+            self.myPrint(res_sorted)
+
+        index_center = np.where(res_sorted[:, 4] == 0)
+        print('index_center is ')
+        self.myPrint(index_center)
+
+        # first localize the out corners. Then calculate the distance from the vector of each two outliers.
+        # left_out_courner = res_sorted[(index_center-2) ]
+
+
+        num_of_src_points = 14 * 2
+        src_point = np.zeros((num_of_src_points, 2), dtype=np.uint)
+        for i in range(num_of_src_points):
+            # half on the left side, the others in right side.
+            if i >= (num_of_src_points / 2):
+                # do not include center because it is not a corner just symbol.
+                src_point[i] = res_sorted[(i + index_center[0] - (num_of_src_points / 2) + 1), 2:(3 + 1)]
+            else:
+                src_point[i] = res_sorted[(i + index_center[0] - (num_of_src_points / 2)), 2:(3+1)]
+
+        if self.flag_print_on == 1:
+            print('src_point', src_point)
+            #self.myPrint(src_point)
+        # cv2.imshow('result of the corner detection', frame)
+        # cv2.waitKey(0)
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> fuck')
+        if self.flag_imshow_on == 1:
+
+            # draw circles at the corners
+            print('res.shape[0] is ', res.shape[0])
+            for i in range(0, res.shape[0]):
+                # I do not know why res[0, :] is the center of the image..??
+                cv2.circle(frame, (res[i, 0], res[i, 1]), 5, (0, 0, 255))
+                cv2.circle(frame, (res[i, 2], res[i, 3]), 5, (0, 255, 0))
+
+            print('num_of_src_points are', num_of_src_points)
+            for i in range(num_of_src_points):
+                src_point = tuple(map(tuple, src_point))
+                cv2.circle(frame, src_point[i], 5, (255, 255, 0), thickness=-1)
+
+            cv2.imshow('result of the corner detection', frame)
+            cv2.waitKey(0)
+
+
+
+
+
+        # Hough Line detection
+        # https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_imgproc/py_houghlines/py_houghlines.html
+        # minLineLength = 100
+        # maxLineGap = 10
+        #
+        # edges = cv2.Canny(img_dilate, 50, 150, apertureSize=3)
+        # print('shape of the frame is ', img_dilate.shape)
+        # print('shape of the edges is ', edges.shape, 'edges is ', edges, 'max is ', np.max(edges))
+        #
+        # mask_corner = np.zeros(img_dilate.shape[::-1], dtype=np.uint8)
+        # for i in range(1, res.shape[0]):
+        #     mask_corner[res[i,2], res[i,3]] = 255
+        #
+        #lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength, maxLineGap)
+        # print('what is the fucking lines', lines, 'shape of the lines', lines.shape)
+        # for i in range(lines.shape[0]):
+        #     for x1, y1, x2, y2 in lines[i]:
+        #         cv2.line(frame, (x1, y1), (x2, y2), (255, 0, 0), thickness=10)
+        #         print('what is lines[', i, '] = ', lines[i])
+        #
+        #
+        # lines = cv2.HoughLines(edges, 1, np.pi / 180, 100)
+        # for i in range(lines.shape[0]):
+        #     for rho, theta in lines[i]:
+        #         a = np.cos(theta)
+        #         b = np.sin(theta)
+        #         x0 = a * rho
+        #         y0 = b * rho
+        #         x1 = int(x0 + 1000 * (-b))
+        #         y1 = int(y0 + 1000 * (a))
+        #         x2 = int(x0 - 1000 * (-b))
+        #         y2 = int(y0 - 1000 * (a))
+        #         cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        #
+        # if self.flag_imshow_on == 1:
+        #     cv2.imshow('canny', edges)
+        #     cv2.imshow('result of the hough transform', frame)
+        #     cv2.waitKey(0)
+
+    def myPrint(self, array):
+        array = np.array(array)
+        print('print start and shape is ', array.shape)
+        for i in range(array.shape[0]):
+            print(array[i])
 
 class dataLoadClass:
     imgInst = []
@@ -97,6 +758,7 @@ class dataLoadClass:
         self.imgInst = imgInst
         self.calibInst = calibInst
         self.bridge = CvBridge()
+        self.lineSegInst = lineSegClass(flag_imshow_on=1, flag_print_on=1)
 
     def subscribeImg(self):
         print('start to subscribe image')
@@ -112,11 +774,6 @@ class dataLoadClass:
         else:
             print('flag_is_compressed_image is wrong')
 
-    def stopSubscribing(self):
-        print('stop subscribing image')
-        # self.image_sub.shutdown()
-        self.rospySubImg.unregister()
-
     def loadImgInFolder(self):
         global fileList
         fileList = glob.glob(path_load_image)
@@ -127,6 +784,7 @@ class dataLoadClass:
         #print('what is fileList', fileList, '\n')
 
         global count
+        fileList = np.sort(fileList)
         for i in fileList:
             count = count + 1
             # print('The ', count, '-th image is ', i)
@@ -179,22 +837,39 @@ class dataLoadClass:
             print(e)
 
     def wrapper(self, nameOfFile=None):
-        global count, num_of_image_in_database
-        global flag_load_calibrated_result
+        global count, flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg
 
-        self.imgInst.imgHomography = self.calibInst.startHomography(self.imgInst.imgData)
+        if flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 1:
+            self.imgInst.imgHomography = self.calibInst.startHomography(self.imgInst.imgData)
+            self.imgInst.redLineSeg = self.lineSegInst.redLineSegmentation(self.imgInst.imgHomography)
 
-        if flag_publishImg == 1:
-            try:
-                self.rospyPubImg.publish(self.bridge.cv2_to_imgmsg(self.imgInst.imgHomography, "bgr8"))
-            except CvBridgeError as e:
-                print(e)
+        elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 2:
+            self.imgInst.redLineSeg = self.lineSegInst.redLineSegmentation(self.imgInst.imgData)
+            
+        elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 3:
+            self.imgInst.imgData = self.lineSegInst.redLineSegmentation(self.imgInst.imgData)
+
 
         if flag_saveImg == 1:
-            print('save iamge with name : ', path_save_image + nameOfFile[-9:])
-            cv2.imwrite(path_save_image + nameOfFile[-9:], self.imgInst.imgHomography)
-            # cv2.imwrite(path_save_image + 'homography/' + nameOfFile[:-9], self.imgInst.imgHomography)
 
+            if flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 1:
+                print('save iamge with name : ', path_save_image + 'cctvView_homography/' + nameOfFile[-9:])
+                cv2.imwrite(path_save_image + 'cctvView_homography/' + nameOfFile[-9:], self.imgInst.imgHomography)
+                cv2.imwrite(path_save_image + 'cctvView_redLineSeg/' + nameOfFile[-9:], self.imgInst.redLineSeg)
+
+            elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 2:
+                print('save iamge with name : ', path_save_image + 'cctvView_redLineSeg/' + nameOfFile[-9:])
+                cv2.imwrite(path_save_image + 'cctvView_redLineSeg/' + nameOfFile[-9:], self.imgInst.redLineSeg)
+
+            elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 3:
+                print('save iamge with name : ', path_save_image + 'cctvView_center/' + nameOfFile[-9:])
+                cv2.imwrite(path_save_image + 'cctvView_center/' + nameOfFile[-9:], self.imgInst.imgData)
+
+        if flag_publishImg == 1:
+                    try:
+                        self.rospyPubImg.publish(self.bridge.cv2_to_imgmsg(self.imgInst.imgHomography, "bgr8"))
+                    except CvBridgeError as e:
+                        print(e)
 
 class imgClass:
     height = 0
@@ -202,6 +877,7 @@ class imgClass:
     imgData = None
     imgUndistort = None
     imgHomography = None
+    imgRedLineSeg = None
 
     def saveImage(self, img):
         self.imgData = img

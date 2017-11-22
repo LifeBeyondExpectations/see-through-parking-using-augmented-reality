@@ -26,20 +26,18 @@ flag_undistort_to_homography = 1
 flag_1_subscribeImg_2_loadImgFile = 2
 flag_is_compressed_image = 1
 
+flag_saveImg = 0
+flag_publishImg = 0
 
-flag_saveImg = 1
-flag_1_undistort_2_homography_3_original = 1
+
+
+
 flag_go_to_wrapper_or_save_subImage = 0
-
-
-
-
-#flag which does not need fixing anymore
 flag_saveImg_which_detect_checkerboard = 0
 
 flag_load_detected_result = 0
 flag_print = 1
-flag_publishImg = 0
+
 
 
 #parameter
@@ -250,6 +248,9 @@ class calibClass:
 
         return frame_homography_RANSAC
 
+
+
+
 class dataLoadClass:
 
     imgInst = []
@@ -368,6 +369,9 @@ class dataLoadClass:
         if flag_saveImg == 1:
             print('save iamge with name : ', path_save_image + nameOfFile[-9:])
             cv2.imwrite(path_save_image + nameOfFile[-9:], self.imgInst.imgHomography)
+
+
+
 class imgClass:
     height = 0
     width = 0
