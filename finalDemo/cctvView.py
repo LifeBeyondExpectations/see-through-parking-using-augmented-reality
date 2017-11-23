@@ -21,9 +21,10 @@ import os
 # flag
 flag_1_subscribeImg_2_loadImgFile = 2
 flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg = 3
-flag_publishImg = 0
+flag_1_measureONLY_2_kalman = 2
 
 flag_saveImg = 1
+flag_publishImg = 0
 flag_1_undistort_2_homography_3_original = 1
 
 flag_is_compressed_image = 1
@@ -37,25 +38,25 @@ flag_print = 1
 
 # parameter
 ROS_TOPIC = 'remote/image_color/compressed'
-
-
+Qfactor = 0.001
 
 #non-fisheye
-path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
-path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
-kernelSize_close = (50, 50)
-kernelSize_open = (30, 30)
+# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
+# path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
+# kernelSize_close = (50, 50)
+# kernelSize_open = (30, 30)
 
 #fisheye
-# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
-# path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
-# kernelSize_close = (30, 30)
-# kernelSize_open = (10, 10)
+path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
+path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
+kernelSize_close = (30, 30)
+kernelSize_open = (10, 10)
 
 
 
 nameOf_pickle_Checkerboard_Detection = 'detect_result_jaesung_171021_1600_delete_files.pickle'
 path_pickle_calibration_variable = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/calib_result_JS_fisheye.pickle'
+boxColor = ((0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255), (255, 255, 0))
 fileList = []
 num_of_image_in_database = 1000
 count = 0
@@ -63,7 +64,7 @@ mybalance = 0
 shape_imgHomography=(616, 565)
 
 
-class calibClass:
+class CalibClass:
     flag_first_didHomography = 1
 
     def startHomography(self, frame_JS):
@@ -101,12 +102,74 @@ class calibClass:
 
         return frame_homography_RANSAC  # frame_homography_JS
 
-class lineSegClass:
+class KalmanFilterClass:
+    def __init__(self):
+        self.processNoise = np.zeros((2,2), dtype=np.float32)
+        # self.processNoise = np.eye(2, dtype=np.float32) * 0.1
+
+        global Qfactor
+        self.measurementNoise = np.eye(2, dtype=np.float32) * Qfactor
+        self.stateTransitionMatrix = np.array([[1, 1], [0, 1]], dtype=np.float32)
+
+    def initialMeasurement(self, z):
+        # print('initial measurement')
+        self.x_post = np.array([z, 0], dtype=np.float32).reshape((2,1)) #[width, d(width)] or [height, d(height)]
+        self.p_post = np.eye(2, dtype=np.float32)
+        # print('x_post and p_post is')
+        # print(self.x_post)
+        # print(self.p_post)
+
+        self.x_pri = np.array((z, 0), dtype=np.float32).reshape((2,1))
+        self.p_pri = np.eye(2, dtype=np.float32)
+        # print('x_pri and p_pri is')
+        # print(self.x_pri)
+        # print(self.p_pri)
+
+        # this value is to save the prior position(x_k-1) to get the current velocity(v_k)
+        self.z_prior = z
+
+
+    def timeUpdate(self):
+        # print('time update')
+        self.x_pri = np.matmul(self.stateTransitionMatrix, self.x_post)
+        self.p_pri = np.matmul(np.matmul(self.stateTransitionMatrix, self.p_post), self.stateTransitionMatrix.transpose()) + self.processNoise
+        # print('x_pri and p_pri is')
+        # print(self.x_pri)
+        # print(self.p_pri)
+
+    def measurementUpdate(self, z):
+        # print('measurement update')
+
+        z_2by1 = np.array((z, z-self.z_prior), dtype=np.float32).reshape((2,1)) #[position, velocity]
+
+        # this value is to save the prior position(x_k-1) to get the current velocity(v_k)
+        self.z_prior = z
+
+        self.kalmanGain = np.matmul(self.p_pri, np.linalg.inv(self.p_pri + self.measurementNoise))
+        self.x_post = self.x_pri + np.matmul(self.kalmanGain, z_2by1 - self.x_pri) #[width, d(width)] or [height, d(height)]
+        self.p_post = (np.eye(2, dtype=np.float32) - self.kalmanGain) * self.p_pri
+
+        # print('x_post and p_post is')
+        # print(self.x_post)
+        # print(self.p_post)
+
+        self.timeUpdate()
+
+
+
+
+
+
+class LineSegClass:
     flag_imshow_on = 0
     flag_print_on = 0
+    flag_first_init_kalman = 1
+
     def __init__(self, flag_imshow_on, flag_print_on):
         self.flag_imshow_on = flag_imshow_on
         self.flag_print_on = flag_print_on
+
+        global flag_1_measureONLY_2_kalman
 
     def whiteLineSegmentation(self, frame):
 
@@ -327,10 +390,10 @@ class lineSegClass:
 
         img_saturation = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 1]
 
-        if self.flag_imshow_on == 2:
+        if self.flag_imshow_on == 1:
             cv2.namedWindow('saturation_figure')
             cv2.imshow('saturation_figure', img_saturation)
-            cv2.waitKey(1)
+            cv2.waitKey(0)
 
         # img_value = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2]
         # if self.flag_imshow_on == 1:
@@ -391,7 +454,7 @@ class lineSegClass:
         global kernelSize_close
         kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, kernelSize_close)
         img_close = cv2.morphologyEx(img_saturation, cv2.MORPH_CLOSE, kernel_close)
-        if self.flag_imshow_on == 2:
+        if self.flag_imshow_on == 1:
             cv2.namedWindow('img_close (30, 30)')
             cv2.imshow('img_close (30, 30)', img_close)
             cv2.waitKey(0)
@@ -399,7 +462,7 @@ class lineSegClass:
         # threshold
         # _, img_threshold_otsu = cv2.threshold(np.array(img_close, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         _, img_threshold = cv2.threshold(img_close, 80, 255, cv2.THRESH_BINARY)
-        if self.flag_imshow_on == 2:
+        if self.flag_imshow_on == 1:
             cv2.namedWindow('cv2.THRESH_BINARY')
             cv2.imshow('cv2.THRESH_BINARY', img_threshold)
             cv2.waitKey(0)
@@ -428,12 +491,12 @@ class lineSegClass:
         global kernelSize_open
         kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, kernelSize_open)
         img_open = cv2.morphologyEx(img_threshold, cv2.MORPH_OPEN, kernel_open)
-        if self.flag_imshow_on == 2:
+        if self.flag_imshow_on == 1:
             cv2.namedWindow('img_open' + str(kernelSize_open))
             cv2.imshow('img_open' + str(kernelSize_open), img_open)
-            cv2.waitKey(1)
+            cv2.waitKey(0)
 
-        global flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg
+        global flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg, boxColor
         if flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 1 or flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 2:
             if self.flag_imshow_on == 1:
                 cv2.namedWindow('redLineSeg')
@@ -452,8 +515,11 @@ class lineSegClass:
 
             ###################################################################################################################################################
 
-            # for label in range(1, num_labels): #label == 0 is background
-            #     cv2.circle(frame, tuple(np.array(centroid[label, :], np.uint16)), radius=10, color=(255, 0, 150), thickness=3)
+            for label in range(1, num_labels): #label == 0 is background
+                cv2.circle(frame, tuple(np.array(centroid[label, :], np.uint16)), radius=10, color=boxColor[label], thickness=3)
+                # print('label is ', label)
+                # cv2.imshow('find centroid', frame)
+                # cv2.waitKey(0)
             #
             #     for i in range(frame.shape[0]): #shape = [height, width, depth]
             #         if img_connectedComponents[i, stat[label, 0]] == label:
@@ -475,28 +541,143 @@ class lineSegClass:
             # https://docs.opencv.org/3.1.0/d3/dc0/group__imgproc__shape.html#ga17ed9f5d79ae97bd4c7cf18403e1689a
             # https://stackoverflow.com/questions/25504964/opencv-python-valueerror-too-many-values-to-unpack
             _, contours, _ = cv2.findContours(image=img_open, mode=1, method=2) #, hierarchy
-            cnt = contours[0]
+            cnt = contours[1] ##   0 ##########################################################################3 fucking code ##################
             rect = cv2.minAreaRect(cnt)
             box = cv2.boxPoints(rect)
             box = np.int0(box)
             cv2.drawContours(frame, [box], 0, (0, 0, 255), 2)
 
-            boxColor = ((0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255), (255, 255, 0))
-            for i in range(box.shape[0]):
-                cv2.circle(frame, tuple(box[i]), radius=10, color=tuple(boxColor[i]), thickness=3)
+
+
+            global flag_1_measureONLY_2_kalman, boxColor
+            if flag_1_measureONLY_2_kalman == 1:
+                for i in range(box.shape[0]):
+                    cv2.circle(frame, tuple(box[i]), radius=5, color=tuple(boxColor[i]), thickness=2)
+
+            elif flag_1_measureONLY_2_kalman == 2:
+
+                # # for comparison with measurementONLY
+                # for i in range(box.shape[0]):
+                #     cv2.circle(frame, tuple(box[i]), radius=5, color=tuple(boxColor[i]), thickness=2)
+
+
+                if self.flag_first_init_kalman == 1:
+
+                    self.kalmanInst = [[KalmanFilterClass(), KalmanFilterClass()] for i in range(4)] # 4 : 4 corners at the car
+                    # print('shape of the self.kalmanInst is', np.shape(self.kalmanInst))
+                    # detail of index of 4by2 matrix
+                    # [0, 0] : self.kalmanInst_width_front_right = KalmanFilterClass()
+                    # [0, 1] : self.kalmanInst_height_front_right = KalmanFilterClass()
+                    # [1, 0] : self.kalmanInst_width_front_left = KalmanFilterClass()
+                    # [1, 1] : self.kalmanInst_height_front_left = KalmanFilterClass()
+                    # [2, 0] : self.kalmanInst_width_rear_right = KalmanFilterClass()
+                    # [2, 1] :self.kalmanInst_height_rear_right = KalmanFilterClass()
+                    # [3, 0] : self.kalmanInst_width_rear_right = KalmanFilterClass()
+                    # [3, 1] :self.kalmanInst_height_rear_right = KalmanFilterClass()
+                    for corner in range(4):
+                        for width_or_height in range(2):
+                            self.kalmanInst[corner][width_or_height].initialMeasurement(z=box[corner, width_or_height])
+
+                        # draw circle
+                        cornerPixel = tuple((self.kalmanInst[corner][0].x_post[0], self.kalmanInst[corner][1].x_post[0]))
+                        # print('cornerPixel is ', cornerPixel)
+                        cv2.circle(frame, cornerPixel, radius=5, color=boxColor[corner], thickness=2)
+
+                    #centroid kalman filter
+                    self.kalmanInstCentroid = [KalmanFilterClass(), KalmanFilterClass()]
+                    for width_or_height in range(2):
+                        self.kalmanInstCentroid[width_or_height].initialMeasurement(z=centroid[2, width_or_height]) #  3  ######################################### should change '3' .. this is just for indicating that label(==3 is the car)
+
+                    #arrow kalman filter
+                    self.kalmanInstEndPixelOfArrow = [KalmanFilterClass(), KalmanFilterClass()]
+
+                    # we assume that the end_of_arrow_pixel has smaller height value than the height value of the centroid.
+                    # this is because we know where the car start in the project.
+                    self.which_corner_defines_end_of_arrow_pixel = np.zeros(2, dtype=np.int32) #[label00, label01]
+                    self.end_of_arrow_pixel = np.zeros(2, dtype=np.int32) #[[label00_width, label00_height], [label01_width, label01_height]]
+                    flag_first_corner_found = 0
+                    for corner in range(4):
+                        if self.kalmanInst[corner][1].x_post[0] < centroid[3, 1]:
+                            self.which_corner_defines_end_of_arrow_pixel[flag_first_corner_found] = corner
+
+                            if flag_first_corner_found == 2:
+                                break
+                            elif flag_first_corner_found == 0:
+                                flag_first_corner_found = 1
+
+                    print('self.which_corner_defines_end_of_arrow_pixel is ', self.which_corner_defines_end_of_arrow_pixel)
+
+                    for width_or_height in range(2):
+                        self.end_of_arrow_pixel[width_or_height] = int((self.kalmanInst[self.which_corner_defines_end_of_arrow_pixel[0]][width_or_height].x_post[0]
+                                                                        + self.kalmanInst[self.which_corner_defines_end_of_arrow_pixel[1]][width_or_height].x_post[0])//2)
+
+                        # origin_of_arrow_pixel is centroid of the car
+                        self.kalmanInstEndPixelOfArrow[width_or_height].initialMeasurement(z=self.end_of_arrow_pixel[width_or_height])
+
+                    # draw arrow
+                    origin_of_arrow = tuple(np.stack((self.kalmanInstCentroid[0].x_post[0], self.kalmanInstCentroid[1].x_post[0])))
+                    end_of_arrow = tuple(np.stack((self.kalmanInstEndPixelOfArrow[0].x_post[0], self.kalmanInstEndPixelOfArrow[1].x_post[0])))
+                    cv2.arrowedLine(img=frame, pt1=origin_of_arrow, pt2=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
+
+                    #do not come here again
+                    self.flag_first_init_kalman = 0
+
+                else:
+                    for corner in range(4):
+                        # print('for ', corner, '-th corner')
+                        for width_or_height in range(2):
+                            # print('width_or_height is ', width_or_height)
+
+                            # box[width, height] is the corner pixel at the rectangle
+                            min = np.sqrt(np.power((self.kalmanInst[corner][0].z_prior - box[0, 0]), 2) + np.power((self.kalmanInst[corner][1].z_prior - box[0, 1]), 2))
+                            minIndex = 0
+                            for label in range(1, box.shape[0]):
+                                tmp = np.sqrt(np.power((self.kalmanInst[corner][0].z_prior - box[label, 0]), 2)
+                                              + np.power((self.kalmanInst[corner][1].z_prior - box[label, 1]), 2))
+                                if min > tmp:
+                                    min = tmp
+                                    minIndex = label
+
+                            # print('min and minIndex is', min, minIndex)
+                            self.kalmanInst[corner][width_or_height].measurementUpdate(z=np.array((box[minIndex, width_or_height]), dtype=np.float32))
+
+                        #draw circle
+                        cornerPixel = tuple((self.kalmanInst[corner][0].x_post[0], self.kalmanInst[corner][1].x_post[0]))
+                        # print('cornerPixel is ', cornerPixel)
+                        cv2.circle(frame, cornerPixel, radius=5, color=boxColor[corner], thickness=2)
+
+                    for width_or_height in range(2):
+
+                        # centroid kalman filter,
+                        sum = 0
+                        for corner in range(4):
+                            sum = sum + self.kalmanInst[corner][width_or_height].x_post[0]
+                        self.kalmanInstCentroid[width_or_height].measurementUpdate(z=sum // 4)
+
+                        # end_of_arrow kalman filter
+                        self.end_of_arrow_pixel[width_or_height] = int((self.kalmanInst[self.which_corner_defines_end_of_arrow_pixel[0]][width_or_height].x_post[0]
+                                                                        + self.kalmanInst[self.which_corner_defines_end_of_arrow_pixel[1]][width_or_height].x_post[0])//2)
+                        self.kalmanInstEndPixelOfArrow[width_or_height].measurementUpdate(z=self.end_of_arrow_pixel[width_or_height])
+
+
+                    #draw arrow
+                    origin_of_arrow = tuple(np.stack((self.kalmanInstCentroid[0].x_post[0], self.kalmanInstCentroid[1].x_post[0])))
+                    end_of_arrow = tuple(np.stack((self.kalmanInstEndPixelOfArrow[0].x_post[0], self.kalmanInstEndPixelOfArrow[1].x_post[0])))
+                    cv2.arrowedLine(img=frame, pt1=origin_of_arrow, pt2=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
 
 
 
 
+                    # for label in range(1, num_labels):  # label == 0 is background
+                    #     cv2.circle(frame, tuple(np.array(centroid[label, :], np.uint16)), radius=10, color=(255, 0, 150), thickness=3)
+                    #
+                    #     origin_of_arrow = tuple(np.array(centroid[label, :], np.uint16))
+                    #     end_of_arrow = (origin_of_arrow[0] + stat[label, 2], origin_of_arrow[1] + stat[label, 3])
+                    #     cv2.arrowedLine(img=frame, pt2=origin_of_arrow, pt1=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
+                    #     cv2.circle(frame, origin_of_arrow, radius=10, color=(0, 255, 255), thickness=3)  # bgr type
+                    #     cv2.circle(frame, end_of_arrow, radius=10, color=(0, 0, 255), thickness=3)
 
-            # for label in range(1, num_labels):  # label == 0 is background
-            #     cv2.circle(frame, tuple(np.array(centroid[label, :], np.uint16)), radius=10, color=(255, 0, 150), thickness=3)
-            #
-            #     origin_of_arrow = tuple(np.array(centroid[label, :], np.uint16))
-            #     end_of_arrow = (origin_of_arrow[0] + stat[label, 2], origin_of_arrow[1] + stat[label, 3])
-            #     cv2.arrowedLine(img=frame, pt2=origin_of_arrow, pt1=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
-            #     cv2.circle(frame, origin_of_arrow, radius=10, color=(0, 255, 255), thickness=3)  # bgr type
-            #     cv2.circle(frame, end_of_arrow, radius=10, color=(0, 0, 255), thickness=3)
+
 
 
 
@@ -538,11 +719,16 @@ class lineSegClass:
             ###################################################################################################################################################
 
 
+
             if self.flag_imshow_on == 1:
                 cv2.namedWindow('redLineSeg')
                 # cv2.imshow('redLineSeg', np.concatenate((frame[:, :, 1], img_open), axis=1))
-                cv2.imshow('redLineSeg', np.concatenate((frame[:, :, 1], img_open), axis=1))
+                cv2.imshow('redLineSeg', frame)
                 cv2.waitKey(1)
+
+                # for hello in range(10):
+                #     print(' ')
+
 
             return frame
 
@@ -748,7 +934,7 @@ class lineSegClass:
         for i in range(array.shape[0]):
             print(array[i])
 
-class dataLoadClass:
+class DataLoadClass:
     imgInst = []
     calibInst = []
     flag_fisrt_didLoadVarDetection = 1
@@ -758,13 +944,13 @@ class dataLoadClass:
         self.imgInst = imgInst
         self.calibInst = calibInst
         self.bridge = CvBridge()
-        self.lineSegInst = lineSegClass(flag_imshow_on=1, flag_print_on=1)
+        self.lineSegInst = LineSegClass(flag_imshow_on=1, flag_print_on=1)
 
     def subscribeImg(self):
         print('start to subscribe image')
 
         if flag_is_compressed_image == 0:
-            # rospy.init_node('dataLoadClass', anonymous=True)
+            # rospy.init_node('DataLoadClass', anonymous=True)
             self.rospySubImg = rospy.Subscriber(ROS_TOPIC, Image, self.callback)
             # automatically go to the callback function : self.callback()
 
@@ -787,14 +973,16 @@ class dataLoadClass:
         fileList = np.sort(fileList)
         for i in fileList:
             count = count + 1
-            # print('The ', count, '-th image is ', i)
-            self.imgInst.saveImage(cv2.imread(i))
 
-            self.wrapper(nameOfFile=i)
-            # cv2.imshow(i, cv2.imread(i))
-            # cv2.waitKey(0)
-            # print('save the roi : _' + path_save_image + 'roi/' + i[-9:])
-            # cv2.imwrite(str(path_save_image + 'roi/' + i[-9:]), cv2.resize(tmp[190:440, 260:510], (0,0), fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC))
+            if count > 100: ##################################################################################################################### fucking code
+                # print('The ', count, '-th image is ', i)
+                self.imgInst.saveImage(cv2.imread(i))
+
+                self.wrapper(nameOfFile=i)
+                # cv2.imshow(i, cv2.imread(i))
+                # cv2.waitKey(0)
+                # print('save the roi : _' + path_save_image + 'roi/' + i[-9:])
+                # cv2.imwrite(str(path_save_image + 'roi/' + i[-9:]), cv2.resize(tmp[190:440, 260:510], (0,0), fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC))
 
     def publishImg(self):
         # http://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscriber%28python%29
@@ -871,7 +1059,7 @@ class dataLoadClass:
                     except CvBridgeError as e:
                         print(e)
 
-class imgClass:
+class ImgClass:
     height = 0
     width = 0
     imgData = None
@@ -883,7 +1071,6 @@ class imgClass:
         self.imgData = img
         self.height, self.width = self.imgData.shape[:2]
 
-
 if __name__ == "__main__":
 
     print("check the version opencv.")
@@ -893,9 +1080,9 @@ if __name__ == "__main__":
     # global -> error here
     # count = 0
 
-    imgInst = imgClass()
-    calibInst = calibClass()
-    dataLoadInst = dataLoadClass(imgInst, calibInst)
+    imgInst = ImgClass()
+    calibInst = CalibClass()
+    dataLoadInst = DataLoadClass(imgInst, calibInst)
 
     # global flag_1_subscribeImg_2_loadImgFile
     try:
