@@ -17,9 +17,10 @@ from tempfile import TemporaryFile
 
 import glob
 import os
+from math import pi
 
 # flag
-flag_1_subscribeImg_2_loadImgFile = 2
+flag_1_subscribeImg_2_loadImgFile_3_image2video = 2
 flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg = 3
 flag_1_measureONLY_2_kalman = 2
 
@@ -41,16 +42,16 @@ ROS_TOPIC = 'remote/image_color/compressed'
 Qfactor = 0.001
 
 #non-fisheye
-# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
-# path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
-# kernelSize_close = (50, 50)
-# kernelSize_open = (30, 30)
+path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
+path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
+kernelSize_close = (50, 50)
+kernelSize_open = (30, 30)
 
 #fisheye
-path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
-path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
-kernelSize_close = (30, 30)
-kernelSize_open = (10, 10)
+# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
+# path_save_image = 'l'
+# kernelSize_close = (50, 50)
+# kernelSize_open = (30, 30)
 
 
 
@@ -154,11 +155,6 @@ class KalmanFilterClass:
         # print(self.p_post)
 
         self.timeUpdate()
-
-
-
-
-
 
 class LineSegClass:
     flag_imshow_on = 0
@@ -390,7 +386,7 @@ class LineSegClass:
 
         img_saturation = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 1]
 
-        if self.flag_imshow_on == 1:
+        if self.flag_imshow_on == 2:
             cv2.namedWindow('saturation_figure')
             cv2.imshow('saturation_figure', img_saturation)
             cv2.waitKey(0)
@@ -454,7 +450,7 @@ class LineSegClass:
         global kernelSize_close
         kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, kernelSize_close)
         img_close = cv2.morphologyEx(img_saturation, cv2.MORPH_CLOSE, kernel_close)
-        if self.flag_imshow_on == 1:
+        if self.flag_imshow_on == 2:
             cv2.namedWindow('img_close (30, 30)')
             cv2.imshow('img_close (30, 30)', img_close)
             cv2.waitKey(0)
@@ -462,7 +458,7 @@ class LineSegClass:
         # threshold
         # _, img_threshold_otsu = cv2.threshold(np.array(img_close, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         _, img_threshold = cv2.threshold(img_close, 80, 255, cv2.THRESH_BINARY)
-        if self.flag_imshow_on == 1:
+        if self.flag_imshow_on == 2:
             cv2.namedWindow('cv2.THRESH_BINARY')
             cv2.imshow('cv2.THRESH_BINARY', img_threshold)
             cv2.waitKey(0)
@@ -491,14 +487,14 @@ class LineSegClass:
         global kernelSize_open
         kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, kernelSize_open)
         img_open = cv2.morphologyEx(img_threshold, cv2.MORPH_OPEN, kernel_open)
-        if self.flag_imshow_on == 1:
+        if self.flag_imshow_on == 2:
             cv2.namedWindow('img_open' + str(kernelSize_open))
             cv2.imshow('img_open' + str(kernelSize_open), img_open)
             cv2.waitKey(0)
 
         global flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg, boxColor
         if flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 1 or flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 2:
-            if self.flag_imshow_on == 1:
+            if self.flag_imshow_on == 2:
                 cv2.namedWindow('redLineSeg')
                 cv2.imshow('redLineSeg', np.concatenate((frame[:, :, 1], img_open), axis=1))
                 cv2.waitKey(1)
@@ -511,6 +507,13 @@ class LineSegClass:
             # print('num_labels are', num_labels)
             # print('stat is ', stat)
             # print('centroid is ', centroid)
+
+
+            # for height in range(img_connectedComponents.shape[0]):
+            #     for width in range(img_connectedComponents.shape[1]):
+
+
+
 
 
             ###################################################################################################################################################
@@ -541,7 +544,7 @@ class LineSegClass:
             # https://docs.opencv.org/3.1.0/d3/dc0/group__imgproc__shape.html#ga17ed9f5d79ae97bd4c7cf18403e1689a
             # https://stackoverflow.com/questions/25504964/opencv-python-valueerror-too-many-values-to-unpack
             _, contours, _ = cv2.findContours(image=img_open, mode=1, method=2) #, hierarchy
-            cnt = contours[1] ##   0 ##########################################################################3 fucking code ##################
+            cnt = contours[0] ##   0 ##########################################################################3 fucking code ##################
             rect = cv2.minAreaRect(cnt)
             box = cv2.boxPoints(rect)
             box = np.int0(box)
@@ -586,7 +589,7 @@ class LineSegClass:
                     #centroid kalman filter
                     self.kalmanInstCentroid = [KalmanFilterClass(), KalmanFilterClass()]
                     for width_or_height in range(2):
-                        self.kalmanInstCentroid[width_or_height].initialMeasurement(z=centroid[2, width_or_height]) #  3  ######################################### should change '3' .. this is just for indicating that label(==3 is the car)
+                        self.kalmanInstCentroid[width_or_height].initialMeasurement(z=centroid[3, width_or_height]) #  3  ######################################### should change '3' .. this is just for indicating that label(==3 is the car)
 
                     #arrow kalman filter
                     self.kalmanInstEndPixelOfArrow = [KalmanFilterClass(), KalmanFilterClass()]
@@ -597,7 +600,7 @@ class LineSegClass:
                     self.end_of_arrow_pixel = np.zeros(2, dtype=np.int32) #[[label00_width, label00_height], [label01_width, label01_height]]
                     flag_first_corner_found = 0
                     for corner in range(4):
-                        if self.kalmanInst[corner][1].x_post[0] < centroid[3, 1]:
+                        if self.kalmanInst[corner][1].x_post[0] < centroid[3, 1]:  #  3  ######################################### should change '3' .. this is just for indicating that label(==3 is the car)
                             self.which_corner_defines_end_of_arrow_pixel[flag_first_corner_found] = corner
 
                             if flag_first_corner_found == 2:
@@ -643,7 +646,6 @@ class LineSegClass:
 
                         #draw circle
                         cornerPixel = tuple((self.kalmanInst[corner][0].x_post[0], self.kalmanInst[corner][1].x_post[0]))
-                        # print('cornerPixel is ', cornerPixel)
                         cv2.circle(frame, cornerPixel, radius=5, color=boxColor[corner], thickness=2)
 
                     for width_or_height in range(2):
@@ -665,7 +667,35 @@ class LineSegClass:
                     end_of_arrow = tuple(np.stack((self.kalmanInstEndPixelOfArrow[0].x_post[0], self.kalmanInstEndPixelOfArrow[1].x_post[0])))
                     cv2.arrowedLine(img=frame, pt1=origin_of_arrow, pt2=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
 
+                    # calculate the theta
+                    horizontal_length = (end_of_arrow[0] - origin_of_arrow[0])
+                    vertical_length = (end_of_arrow[1] - origin_of_arrow[1])
+                    if horizontal_length >= 0 and vertical_length >= 0: # range : 0 ~ pi/2
+                        theta = np.arctan(horizontal_length / vertical_length)
+                        theta = (theta * 180 / pi)
+                        cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[0], thickness=3)
 
+                    elif horizontal_length >= 0 and vertical_length < 0: # range : pi/2 ~ pi
+                        theta = np.arctan(horizontal_length / vertical_length) + (pi)
+                        theta = (theta * 180 / pi)
+                        cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[1], thickness=3)
+
+                    elif horizontal_length < 0 and vertical_length < 0:
+                        theta = np.arctan(horizontal_length / vertical_length) + (pi)
+                        theta = (theta * 180 / pi)
+                        cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[2], thickness=3)
+
+                    elif horizontal_length < 0 and vertical_length >= 0: # - pi/2 ~ 0
+                        theta = np.arctan(horizontal_length / vertical_length) + (pi * 2)
+                        theta = (theta * 180 / pi)
+                        cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[3], thickness=3)
+
+
+
+                    print(' >> theta, horizontal_length, vertical_length is  ', theta, horizontal_length, vertical_length)
+                    # cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255, 255, 50), thickness=3)
+
+                        # print('cornerPixel is ', cornerPixel)
 
 
                     # for label in range(1, num_labels):  # label == 0 is background
@@ -974,15 +1004,42 @@ class DataLoadClass:
         for i in fileList:
             count = count + 1
 
-            if count > 100: ##################################################################################################################### fucking code
-                # print('The ', count, '-th image is ', i)
-                self.imgInst.saveImage(cv2.imread(i))
+            # if count > 100: ##################################################################################################################### fucking code
+            # print('The ', count, '-th image is ', i)
+            self.imgInst.saveImage(cv2.imread(i))
 
-                self.wrapper(nameOfFile=i)
-                # cv2.imshow(i, cv2.imread(i))
-                # cv2.waitKey(0)
-                # print('save the roi : _' + path_save_image + 'roi/' + i[-9:])
-                # cv2.imwrite(str(path_save_image + 'roi/' + i[-9:]), cv2.resize(tmp[190:440, 260:510], (0,0), fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC))
+            self.wrapper(nameOfFile=i)
+            
+            # cv2.imshow(i, cv2.imread(i))
+            # cv2.waitKey(0)
+            # print('save the roi : _' + path_save_image + 'roi/' + i[-9:])
+            # cv2.imwrite(str(path_save_image + 'roi/' + i[-9:]), cv2.resize(tmp[190:440, 260:510], (0,0), fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC))
+
+    def image2video(self):
+        global fileList, num_of_image_in_database
+        fileList = glob.glob(path_load_image)
+        # print('path_image_database is ', str(save_concat_result + '*.png'))
+        num_of_image_in_database = len(fileList)
+
+        fileList = np.sort(fileList)
+        self.flag_first_set_codec = 1
+
+        for image in fileList:
+            frame = cv2.imread(image)
+
+            if self.flag_first_set_codec == 1:
+                # set codec
+                fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
+                out = cv2.VideoWriter((path_save_image + 'cctvView_yolo/' + 'output.avi'), fourcc, 5.0, frame.shape[:2][::-1])
+
+                self.flag_first_set_codec = 0
+
+            out.write(frame)
+
+        # Release everything if job is finished
+        out.release()
+        cv2.destroyAllWindows()
+
 
     def publishImg(self):
         # http://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscriber%28python%29
@@ -1084,9 +1141,9 @@ if __name__ == "__main__":
     calibInst = CalibClass()
     dataLoadInst = DataLoadClass(imgInst, calibInst)
 
-    # global flag_1_subscribeImg_2_loadImgFile
+    # global flag_1_subscribeImg_2_loadImgFile_3_image2video
     try:
-        if flag_1_subscribeImg_2_loadImgFile == 1:
+        if flag_1_subscribeImg_2_loadImgFile_3_image2video == 1:
             # One python file for one init_node
             rospy.init_node('carView', anonymous=True)
             dataLoadInst.subscribeImg()
@@ -1096,11 +1153,14 @@ if __name__ == "__main__":
 
             rospy.spin()
 
-        elif flag_1_subscribeImg_2_loadImgFile == 2:
+        elif flag_1_subscribeImg_2_loadImgFile_3_image2video == 2:
             dataLoadInst.loadImgInFolder()
 
             if flag_publishImg == 1:
                 dataLoadInst.publishImg()
+
+        elif flag_1_subscribeImg_2_loadImgFile_3_image2video == 3:
+            dataLoadInst.image2video()
 
     except KeyboardInterrupt:
         print("Shutting down")
