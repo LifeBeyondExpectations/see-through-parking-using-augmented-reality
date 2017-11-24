@@ -49,7 +49,7 @@ kernelSize_open = (30, 30)
 
 #fisheye
 # path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
-# path_save_image = 'l'
+# path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
 # kernelSize_close = (50, 50)
 # kernelSize_open = (30, 30)
 
@@ -160,6 +160,8 @@ class LineSegClass:
     flag_imshow_on = 0
     flag_print_on = 0
     flag_first_init_kalman = 1
+    end_of_arrow = None
+    theta = 0
 
     def __init__(self, flag_imshow_on, flag_print_on):
         self.flag_imshow_on = flag_imshow_on
@@ -589,7 +591,7 @@ class LineSegClass:
                     #centroid kalman filter
                     self.kalmanInstCentroid = [KalmanFilterClass(), KalmanFilterClass()]
                     for width_or_height in range(2):
-                        self.kalmanInstCentroid[width_or_height].initialMeasurement(z=centroid[3, width_or_height]) #  3  ######################################### should change '3' .. this is just for indicating that label(==3 is the car)
+                        self.kalmanInstCentroid[width_or_height].initialMeasurement(z=centroid[1, width_or_height]) #  3  ######################################### should change '3' .. this is just for indicating that label(==3 is the car)
 
                     #arrow kalman filter
                     self.kalmanInstEndPixelOfArrow = [KalmanFilterClass(), KalmanFilterClass()]
@@ -600,7 +602,7 @@ class LineSegClass:
                     self.end_of_arrow_pixel = np.zeros(2, dtype=np.int32) #[[label00_width, label00_height], [label01_width, label01_height]]
                     flag_first_corner_found = 0
                     for corner in range(4):
-                        if self.kalmanInst[corner][1].x_post[0] < centroid[3, 1]:  #  3  ######################################### should change '3' .. this is just for indicating that label(==3 is the car)
+                        if self.kalmanInst[corner][1].x_post[0] < centroid[1, 1]:  #  3  ######################################### should change '3' .. this is just for indicating that label(==3 is the car)
                             self.which_corner_defines_end_of_arrow_pixel[flag_first_corner_found] = corner
 
                             if flag_first_corner_found == 2:
@@ -617,10 +619,10 @@ class LineSegClass:
                         # origin_of_arrow_pixel is centroid of the car
                         self.kalmanInstEndPixelOfArrow[width_or_height].initialMeasurement(z=self.end_of_arrow_pixel[width_or_height])
 
-                    # draw arrow
-                    origin_of_arrow = tuple(np.stack((self.kalmanInstCentroid[0].x_post[0], self.kalmanInstCentroid[1].x_post[0])))
-                    end_of_arrow = tuple(np.stack((self.kalmanInstEndPixelOfArrow[0].x_post[0], self.kalmanInstEndPixelOfArrow[1].x_post[0])))
-                    cv2.arrowedLine(img=frame, pt1=origin_of_arrow, pt2=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
+                    # # draw arrow
+                    # origin_of_arrow = tuple(np.stack((self.kalmanInstCentroid[0].x_post[0], self.kalmanInstCentroid[1].x_post[0])))
+                    # end_of_arrow = tuple(np.stack((self.kalmanInstEndPixelOfArrow[0].x_post[0], self.kalmanInstEndPixelOfArrow[1].x_post[0])))
+                    # cv2.arrowedLine(img=frame, pt1=origin_of_arrow, pt2=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
 
                     #do not come here again
                     self.flag_first_init_kalman = 0
@@ -662,50 +664,48 @@ class LineSegClass:
                         self.kalmanInstEndPixelOfArrow[width_or_height].measurementUpdate(z=self.end_of_arrow_pixel[width_or_height])
 
 
-                    #draw arrow
-                    origin_of_arrow = tuple(np.stack((self.kalmanInstCentroid[0].x_post[0], self.kalmanInstCentroid[1].x_post[0])))
-                    end_of_arrow = tuple(np.stack((self.kalmanInstEndPixelOfArrow[0].x_post[0], self.kalmanInstEndPixelOfArrow[1].x_post[0])))
-                    cv2.arrowedLine(img=frame, pt1=origin_of_arrow, pt2=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
+                #draw arrow
+                # origin_of_arrow = tuple(np.stack((self.kalmanInstCentroid[0].x_post[0], self.kalmanInstCentroid[1].x_post[0])))
+                origin_of_arrow = tuple(np.concatenate((self.kalmanInstCentroid[0].x_post[0], self.kalmanInstCentroid[1].x_post[0])))
+                self.end_of_arrow = tuple(np.concatenate((self.kalmanInstEndPixelOfArrow[0].x_post[0], self.kalmanInstEndPixelOfArrow[1].x_post[0])))
+                # print('fuck this tuple thing : self.end_of_arrow is ', self.end_of_arrow, 'origin_of_arrow is', origin_of_arrow)
+                cv2.arrowedLine(img=frame, pt1=origin_of_arrow, pt2=self.end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
 
-                    # calculate the theta
-                    horizontal_length = (end_of_arrow[0] - origin_of_arrow[0])
-                    vertical_length = (end_of_arrow[1] - origin_of_arrow[1])
-                    if horizontal_length >= 0 and vertical_length >= 0: # range : 0 ~ pi/2
-                        theta = np.arctan(horizontal_length / vertical_length)
-                        theta = (theta * 180 / pi)
-                        cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[0], thickness=3)
+                # calculate the theta
+                horizontal_length = (self.end_of_arrow[0] - origin_of_arrow[0])
+                vertical_length = (self.end_of_arrow[1] - origin_of_arrow[1])
+                if horizontal_length >= 0 and vertical_length >= 0: # range : 0 ~ pi/2
+                    self.theta = np.arctan(horizontal_length / vertical_length) + pi
+                    # self.theta = (self.theta * 180 / pi)
+                    # cv2.putText(img=frame, text=str(self.theta), org=self.end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[0], thickness=3)
 
-                    elif horizontal_length >= 0 and vertical_length < 0: # range : pi/2 ~ pi
-                        theta = np.arctan(horizontal_length / vertical_length) + (pi)
-                        theta = (theta * 180 / pi)
-                        cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[1], thickness=3)
+                elif horizontal_length >= 0 and vertical_length < 0: # range : pi/2 ~ pi
+                    self.theta = np.arctan(horizontal_length / vertical_length) + (2 * pi)
+                    # self.theta = (self.theta * 180 / pi)
+                    # cv2.putText(img=frame, text=str(self.theta), org=self.end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[1], thickness=3)
 
-                    elif horizontal_length < 0 and vertical_length < 0:
-                        theta = np.arctan(horizontal_length / vertical_length) + (pi)
-                        theta = (theta * 180 / pi)
-                        cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[2], thickness=3)
+                elif horizontal_length < 0 and vertical_length < 0:
+                    self.theta = np.arctan(horizontal_length / vertical_length)
+                    # self.theta = (self.theta * 180 / pi)
+                    # cv2.putText(img=frame, text=str(self.theta), org=self.end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[2], thickness=3)
 
-                    elif horizontal_length < 0 and vertical_length >= 0: # - pi/2 ~ 0
-                        theta = np.arctan(horizontal_length / vertical_length) + (pi * 2)
-                        theta = (theta * 180 / pi)
-                        cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[3], thickness=3)
+                elif horizontal_length < 0 and vertical_length >= 0: # - pi/2 ~ 0
+                    self.theta = np.arctan(horizontal_length / vertical_length) + pi
+                    # self.theta = (self.theta * 180 / pi)
+                    # cv2.putText(img=frame, text=str(self.theta), org=self.end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=boxColor[3], thickness=3)
 
-
-
-                    print(' >> theta, horizontal_length, vertical_length is  ', theta, horizontal_length, vertical_length)
-                    # cv2.putText(img=frame, text=str(theta), org=end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255, 255, 50), thickness=3)
-
-                        # print('cornerPixel is ', cornerPixel)
-
+                # print(' >> self.theta, horizontal_length, vertical_length is  ', self.theta, horizontal_length, vertical_length)
+                self.theta = (self.theta * 180 / pi)
+                cv2.putText(img=frame, text=str(self.theta), org=self.end_of_arrow, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255, 255, 50), thickness=3)
 
                     # for label in range(1, num_labels):  # label == 0 is background
                     #     cv2.circle(frame, tuple(np.array(centroid[label, :], np.uint16)), radius=10, color=(255, 0, 150), thickness=3)
                     #
                     #     origin_of_arrow = tuple(np.array(centroid[label, :], np.uint16))
-                    #     end_of_arrow = (origin_of_arrow[0] + stat[label, 2], origin_of_arrow[1] + stat[label, 3])
-                    #     cv2.arrowedLine(img=frame, pt2=origin_of_arrow, pt1=end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
+                    #     self.end_of_arrow = (origin_of_arrow[0] + stat[label, 2], origin_of_arrow[1] + stat[label, 3])
+                    #     cv2.arrowedLine(img=frame, pt2=origin_of_arrow, pt1=self.end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
                     #     cv2.circle(frame, origin_of_arrow, radius=10, color=(0, 255, 255), thickness=3)  # bgr type
-                    #     cv2.circle(frame, end_of_arrow, radius=10, color=(0, 0, 255), thickness=3)
+                    #     cv2.circle(frame, self.end_of_arrow, radius=10, color=(0, 0, 255), thickness=3)
 
 
 
@@ -751,6 +751,7 @@ class LineSegClass:
 
 
             if self.flag_imshow_on == 1:
+                print('result of the redLineSeg is ', self.end_of_arrow, self.theta)
                 cv2.namedWindow('redLineSeg')
                 # cv2.imshow('redLineSeg', np.concatenate((frame[:, :, 1], img_open), axis=1))
                 cv2.imshow('redLineSeg', frame)
@@ -760,7 +761,7 @@ class LineSegClass:
                 #     print(' ')
 
 
-            return frame
+            return frame, self.end_of_arrow, self.theta
 
     def fuck(self):
 
@@ -993,7 +994,7 @@ class DataLoadClass:
     def loadImgInFolder(self):
         global fileList
         fileList = glob.glob(path_load_image)
-        #print('path_load_image is ', path_load_image)
+        print('path_load_image is ', path_load_image)
 
         global num_of_image_in_database
         num_of_image_in_database = len(fileList)
@@ -1003,8 +1004,6 @@ class DataLoadClass:
         fileList = np.sort(fileList)
         for i in fileList:
             count = count + 1
-
-            # if count > 100: ##################################################################################################################### fucking code
             # print('The ', count, '-th image is ', i)
             self.imgInst.saveImage(cv2.imread(i))
 
@@ -1039,7 +1038,6 @@ class DataLoadClass:
         # Release everything if job is finished
         out.release()
         cv2.destroyAllWindows()
-
 
     def publishImg(self):
         # http://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscriber%28python%29
@@ -1086,13 +1084,13 @@ class DataLoadClass:
 
         if flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 1:
             self.imgInst.imgHomography = self.calibInst.startHomography(self.imgInst.imgData)
-            self.imgInst.redLineSeg = self.lineSegInst.redLineSegmentation(self.imgInst.imgHomography)
+            self.imgInst.redLineSeg, _, _ = self.lineSegInst.redLineSegmentation(self.imgInst.imgHomography)
 
         elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 2:
-            self.imgInst.redLineSeg = self.lineSegInst.redLineSegmentation(self.imgInst.imgData)
+            self.imgInst.redLineSeg, _, _ = self.lineSegInst.redLineSegmentation(self.imgInst.imgData)
             
         elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 3:
-            self.imgInst.imgData = self.lineSegInst.redLineSegmentation(self.imgInst.imgData)
+            self.imgInst.imgData, _, _ = self.lineSegInst.redLineSegmentation(self.imgInst.imgData)
 
 
         if flag_saveImg == 1:
@@ -1127,6 +1125,20 @@ class ImgClass:
     def saveImage(self, img):
         self.imgData = img
         self.height, self.width = self.imgData.shape[:2]
+
+class Import_cctvView:
+    end_of_array = np.zeros(2, dtype=np.float32)
+
+    def __int__(self):
+        print('__init__ in the class < Import_cctvView >')
+        self.imgInst = ImgClass()
+        self.calibInst = CalibClass()
+        self.dataLoadInst = DataLoadClass(self.imgInst, self.calibInst)
+        self.lineSegInst = LineSegClass(flag_imshow_on=1, flag_print_on=1)
+
+    def getCarLocationAngle(self, frame_cctv):
+        _, end_of_array, angle = self.lineSegInst.redLineSegmentation(frame_cctv)
+        return end_of_array, angle
 
 if __name__ == "__main__":
 

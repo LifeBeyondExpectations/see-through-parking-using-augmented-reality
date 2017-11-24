@@ -18,15 +18,17 @@ from tempfile import TemporaryFile
 import glob
 import os
 
+from cctvView import KalmanFilterClass, Import_cctvView #, LineSegClass
 
 #flag
 flag_fisheye_to_undistort = 0
 flag_undistort_to_homography = 1
+flag_homography_to_warpAffine = 0
 
 flag_1_subscribeImg_2_loadImgFile = 2
 flag_is_compressed_image = 1
 
-flag_saveImg = 0
+flag_saveImg = 1
 flag_publishImg = 0
 
 
@@ -42,15 +44,25 @@ flag_print = 1
 
 #parameter
 ROS_TOPIC = 'remote/image_color/compressed'#'jaesung_lens_camera/image_color'
-path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView_undistort/*.png'
-path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView_homography/'
+# if flag_undistort_to_homography == 1:
+path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView/*.png'
+# elif flag_homography_to_warpAffine == 1:
+# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView_homography/*.png'
+# elif flag_fisheye_to_undistort == 1:
+# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView/*.png'
 
+path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
+path_cctv_homograph_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
 nameOf_pickle_Checkerboard_Detection = 'detect_result_jaesung_171021_1600_delete_files.pickle'
 path_pickle_calibration_variable = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/calib_result_JS_fisheye.pickle'
 fileList = []
 num_of_image_in_database = 1000
 count = 0
 mybalance = 0
+
+#parameter from cctvView.py
+shape_imgHomography=(616, 565)
+cameraLocation_in_carView = (210, 247)
 
 class calibClass:
     # you must check the checkboard which you would like to use for the calibration
@@ -69,128 +81,6 @@ class calibClass:
     height = 0
     width = 0
 
-    def __init__(self):
-        # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
-        self.objp = np.zeros((1, self.CHECKERBOARD[0] * self.CHECKERBOARD[1], 3), np.float32)
-        self.objp[0, :, :2] = np.mgrid[0:self.CHECKERBOARD[0], 0:self.CHECKERBOARD[1]].T.reshape(-1, 2)
-
-    def detectCheckerBoard(self, frame):
-        # Our operations on the frame come here
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        # https://docs.opencv.org/trunk/d9/d0c/group__calib3d.html#ga93efa9b0aa890de240ca32b11253dd4a
-        ret, corners = cv2.findChessboardCorners(image=gray,
-                                                 patternSize=self.CHECKERBOARD,
-                                                 flags=(cv2.CALIB_CB_ADAPTIVE_THRESH+cv2.CALIB_CB_NORMALIZE_IMAGE))
-
-        # If found, add object points, image points (after refining them)
-        if ret == True:
-            print(">> detected the checkerboard")
-
-            global flag_1_subscribeImg_2_loadImgFile
-            # Save images if wanted
-            if flag_1_subscribeImg_2_loadImgFile == 1 and flag_saveImg_which_detect_checkerboard == 1:
-                cv2.imwrite(path_save_image + (str((count + 0)) + '.png'), frame)
-
-            # https://docs.opencv.org/3.0-beta/modules/imgproc/doc/feature_detection.html#void cornerSubPix(InputArray image, InputOutputArray corners, Size winSize, Size zeroZone, TermCriteria criteria)
-            corners2 = cv2.cornerSubPix(image=gray,
-                                        corners=corners,
-                                        winSize=(11, 11),
-                                        zeroZone=(-1, -1),
-                                        criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001))
-
-            self.imgpoints.append(corners2)
-            self.objpoints.append(self.objp)
-
-            # Draw and display the corners
-            frame = cv2.drawChessboardCorners(image=frame, patternSize=self.CHECKERBOARD, corners=corners2, patternWasFound=ret)
-
-        # Display the resulting frame
-        cv2.namedWindow('checkerboard detected frame')
-        cv2.imshow('checkerboard detected frame', frame)
-        cv2.waitKey(1)
-
-    def saveVarInDetection(self):
-        with open(nameOf_pickle_Checkerboard_Detection, 'w') as f:
-            pickle.dump([self.objpoints, self.imgpoints, self.width, self.height], f)
-
-    def loadVarInDetection(self):
-        print('frame : width :', self.width, 'height :', self.height)
-        with open(nameOf_pickle_Checkerboard_Detection) as f:
-            self.objpoints, self.imgpoints, self.width_trainImg, self.height_trainImg = pickle.load(f)
-
-            global flag_print
-            if flag_print == 1:
-                # check the result
-                tmp = np.array(self.objpoints)
-                print("shape of objpoints is ", tmp.shape)
-    
-                tmp = np.array(self.imgpoints)
-                print("shape of imgpoints is ", tmp.shape)
-    
-                print("width_trainImg is ", self.width_trainImg, "height_trainImg is ", self.height_trainImg)
-
-    def startCalibration(self):        
-        
-        self.camera_matrix = np.zeros((3, 3))
-        self.distCoeffs = np.zeros((4, 1))
-
-        N_OK = len(self.objpoints)
-        self.rvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
-        self.tvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
-        self.ret, _, _, _, _ = cv2.fisheye.calibrate(
-            objectPoints=self.objpoints,
-            imagePoints=self.imgpoints,
-            image_size=(self.width_trainImg, self.height_trainImg),
-            K=self.camera_matrix,
-            D=self.distCoeffs,
-            rvecs=None,#self.rvecs,
-            tvecs=None,#self.tvecs,
-            flags=(cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC + cv2.fisheye.CALIB_FIX_SKEW), # +cv2.fisheye.CALIB_FIX_PRINCIPAL_POINT  + cv2.fisheye.CALIB_CHECK_COND
-            criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 200, 1e-6))
-
-        mybalance = 1
-        self.new_camera_matrix = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(K=self.camera_matrix,
-                                                                                        D=self.distCoeffs,
-                                                                                        image_size=(self.width_trainImg, self.height_trainImg),
-                                                                                        R=np.eye(3),
-                                                                                        P=None,
-                                                                                        balance=mybalance,
-                                                                                        new_size=(self.width, self.height),
-                                                                                        fov_scale=1.0
-                                                                                        )
-
-
-        # https://medium.com/@kennethjiang/calibrate-fisheye-lens-using-opencv-part-2-13990f1b157f
-        self.map1, self.map2 = cv2.fisheye.initUndistortRectifyMap(K=self.camera_matrix,
-                                                                   D=self.distCoeffs,
-                                                                   R=np.eye(3),
-                                                                   P=self.new_camera_matrix,
-                                                                   size=(self.width, self.height),
-                                                                   m1type=cv2.CV_32FC1)
-
-        global flag_print
-        if flag_print == 1:
-            # check the result of calibration
-            print('camera matrix is ')
-            print(self.camera_matrix)
-            print('new camera Matrix is ')
-            print(self.new_camera_matrix)
-            # print('self.rvecs is ')
-            # print(self.rvecs)
-            # print('self.tvecs is ')
-            # print(self.tvecs)
-            print('distort Coeffs is ')
-            print(self.distCoeffs)
-            print('RMS re-projection error is ', self.ret)            
-
-        print("calibration complete")
-
-    def saveVarAfterCalibration(self):
-        with open(path_pickle_calibration_variable, 'w') as f:
-            pickle.dump([self.camera_matrix, self.distCoeffs, self.new_camera_matrix, self.width, self.height], f)
-            # self.camera_matrix, self.distCoeffs, self.new_camera_matrix, self.width, self.height, self.roi, self.map1, self.map2
-            
     def loadVarAfterCalibration(self):
         with open(path_pickle_calibration_variable) as f:
             self.camera_matrix, self.distCoeffs, self.new_camera_matrix, self.width_trainImage, self.height_trainImage, self.roi, self.map1, self.map2 = pickle.load(f)
@@ -217,17 +107,20 @@ class calibClass:
         if self.flag_first_didHomography == 1:
 
             srcPixel_image = np.array([
-                [349, 589], [448,590], [547, 590], [650, 590], [755, 592], [863, 590],
-                [246, 614], [369, 615], [504, 613], [64, 614], [792, 616], [938, 617],
-                [27, 662],  [210, 664], [413, 667], [639, 670], [875, 672], [1100, 674],
-                            [90,864],   [613, 892], [1200, 900]
+                [288, 682], [400, 682], [525, 681], [663, 675], [802, 667], [ 932, 658],
+                [197, 713], [327, 715], [476, 716], [655, 711], [817, 700], [ 980, 681],
+                [117, 742], [255, 750], [435, 754], [646, 752], [850, 737], [1053, 715],
+                [ 12, 776], [157, 800], [367, 813], [637, 815], [906, 798], [1146, 761],
+                            [ 10, 868], [251, 917], [615, 934], [990, 905], [1279, 840]
+
             ])
 
             dstPixel_ground = np.array([
-                [100, 100], [200, 100], [300, 100], [400, 100], [500, 100], [600, 100],
-                [100, 200], [200, 200], [300, 200], [400, 200], [500, 200], [600, 200],
-                [100, 300], [200, 300], [300, 300], [400, 300], [500, 300], [600, 300],
-                            [200, 400], [300, 400], [400, 400],
+                            [80,   0], [120,   0], [160,   0], [200,   0], [240,   0], [280,   0]
+                          , [80,  40], [120,  40], [160,  40], [200,  40], [240,  40], [280,  40]
+                          , [80,  80], [120,  80], [160,  80], [200,  80], [240,  80], [280,  80]
+                          , [80, 120], [120, 120], [160, 120], [200, 120], [240, 120], [280, 120]
+                                      ,[120, 160], [160, 160], [200, 160], [240, 160], [280, 160]
             ])
 
             # srcPixel_image, dstPixel_ground = np.array(srcPixel_image), np.array(dstPixel_ground)
@@ -240,7 +133,10 @@ class calibClass:
             #do not calculate homography again
             self.flag_first_didHomography = 0
 
-        frame_homography_RANSAC = cv2.warpPerspective(frame, self.homography_RANSAC, frame.shape[:2][::-1])
+        frame_homography_RANSAC = cv2.warpPerspective(frame, self.homography_RANSAC, (300, 300))#frame.shape[:2][::-1]
+        cv2.imshow('frame', frame)
+        cv2.imshow('warpPerspective', frame_homography_RANSAC)
+        cv2.waitKey(1)
 
         # cv2.namedWindow('Transformation of undistorted frame of JS fisheye camera using homography')
         # cv2.imshow('Transformation of undistorted frame of JS fisheye camera using homography', frame_homography_RANSAC)
@@ -248,8 +144,51 @@ class calibClass:
 
         return frame_homography_RANSAC
 
+#CarViewHomography_2_CctvViewHomography:
+class ViewTransform:
+    # carLocation = np.zeros(2, dtype=np.float32)
+    def __init__(self, cctvViewTopic=None, cctvViewPath=None):
+        print('in the __init__ of ViewTransforms')
+        if flag_1_subscribeImg_2_loadImgFile == 1:
+            print('later')
 
+        elif flag_1_subscribeImg_2_loadImgFile == 2:
+            self.fileList_cctv = glob.glob(cctvViewPath)
+            self.fileList_cctv = np.sort(self.fileList_cctv)
+            print('>> is the class Import_cctvView initialized?')
+            self.import_cctvView_inst = Import_cctvView()
+            print('>> is the class Import_cctvView initialized? __init__ is needed ?') #yes
+            self.import_cctvView_inst.__int__()
 
+    def getCarLocationAngle(self):
+        # print('find location and angle of the car in cctvView')
+        if flag_1_subscribeImg_2_loadImgFile == 2:
+            # location = np.zeros(2, dtype=np.float32)
+            global count
+            print(count)
+            return self.import_cctvView_inst.getCarLocationAngle(frame_cctv=cv2.imread(self.fileList_cctv[count]))
+
+        elif flag_1_subscribeImg_2_loadImgFile == 1:
+            print('not finalize coding yet')
+
+    def generate_car_roi_in_cctvView(self, frameCarView, emptyFrame=None):
+        carLocation, carAngle = self.getCarLocationAngle() #carLocation = (width, height), carAngle=(theta) refer to cctvView.py
+        # cameraLocation_in_carView = [429, 489]
+        global cameraLocation_in_carView
+        matrixTranslate = np.float32([[1,0,(carLocation[0] - cameraLocation_in_carView[0])], [0, 1, (carLocation[1] - cameraLocation_in_carView[1])]])
+        matrixRotation = cv2.getRotationMatrix2D(center=tuple(np.divide(frameCarView.shape[:2][::-1],2)), angle=carAngle, scale=1)
+        # print('matrixTranslate, matrixRotation, carLocation, carAngle is ')
+        # print(matrixTranslate)
+        # print(matrixRotation)
+        # print(carLocation, carAngle)
+        # matrixRotation[:][2] = matrixTranslate
+        # cv2.imshow('frameCarView', frameCarView)
+        # emptyFrame = cv2.warpAffine(src=frameCarView, M=matrixRotation, dsize=shape_imgHomography)
+        # cv2.imshow('rotation', emptyFrame)
+        # emptyFrame = cv2.warpAffine(src=emptyFrame, M=matrixTranslate, dsize=shape_imgHomography)
+        # cv2.imshow('translation', emptyFrame)
+        # cv2.waitKey(1)
+        return emptyFrame
 
 class dataLoadClass:
 
@@ -258,10 +197,11 @@ class dataLoadClass:
     flag_fisrt_didLoadVarDetection = 1
     flag_first_didLoadVarCalibration = 1
 
-    def __init__(self, imgInst, calibInst):
+    def __init__(self, imgInst, calibInst=None, viewTransformInst=None):
         self.imgInst = imgInst
         self.calibInst = calibInst
         self.bridge = CvBridge()
+        self.viewTransformInst = viewTransformInst
 
     def subscribeImg(self):
         print('start to subscribe image')
@@ -287,9 +227,10 @@ class dataLoadClass:
         # print('what is fileList', fileList, '\n')
 
         global count
+        fileList = np.sort(fileList)
         for i in fileList:
             count = count + 1
-            print('The ', count, '-th image is ', i)
+            # print('The ', count, '-th image is ', i)
             self.imgInst.saveImage(cv2.imread(i))
 
             self.wrapper(nameOfFile=i)
@@ -358,6 +299,13 @@ class dataLoadClass:
         elif flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 1:
             self.imgInst.imgHomography = self.calibInst.startHomography(self.imgInst.imgData)
 
+        elif flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 0 and flag_homography_to_warpAffine == 1:
+            self.viewTransformInst.getCarLocationAngle()
+            self.imgInst.imgWarp = np.zeros(shape_imgHomography, dtype=np.uint32)
+            self.imgInst.imgWarp = self.viewTransformInst.generate_car_roi_in_cctvView(self.imgInst.imgData, self.imgInst.imgWarp)
+            cv2.imshow('viewTransform display', self.imgInst.imgWarp)
+            cv2.waitKey(1)
+
 
 
         if flag_publishImg == 1:
@@ -367,8 +315,13 @@ class dataLoadClass:
                 print(e)
                 
         if flag_saveImg == 1:
-            print('save iamge with name : ', path_save_image + nameOfFile[-9:])
-            cv2.imwrite(path_save_image + nameOfFile[-9:], self.imgInst.imgHomography)
+            # print('save iamge with name : ', path_save_image + nameOfFile[-9:])
+
+            if flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 1:
+                cv2.imwrite(path_save_image + 'carView_homography/' + nameOfFile[-9:], self.imgInst.imgHomography)
+
+            elif flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 0 and flag_homography_to_warpAffine == 1:
+                cv2.imwrite(path_save_image + 'carView_2_cctvView/' + nameOfFile[-9:], self.imgInst.imgWarp)
 
 
 
@@ -378,6 +331,7 @@ class imgClass:
     imgData = None
     imgUndistort = None
     imgHomography = None
+    imgWarp = None
 
     def saveImage(self, img):
         self.imgData = img
@@ -394,7 +348,13 @@ if __name__ == "__main__":
 
     imgInst = imgClass()
     calibInst = calibClass()
-    dataLoadInst = dataLoadClass(imgInst, calibInst)
+    if flag_homography_to_warpAffine == 1:
+        # global path_cctv_homograph_image # no global in here
+        viewTransformInst = ViewTransform(cctvViewPath=path_cctv_homograph_image)
+    else:
+        viewTransformInst = None
+
+    dataLoadInst = dataLoadClass(imgInst, calibInst, viewTransformInst)
 
     #global flag_1_subscribeImg_2_loadImgFile
     try:
