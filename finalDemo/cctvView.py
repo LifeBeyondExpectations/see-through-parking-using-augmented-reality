@@ -22,11 +22,12 @@ from math import pi
 # flag
 flag_1_subscribeImg_2_loadImgFile_3_image2video = 2
 flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg = 3
+flag_1_fisheye_2_non_fisheye = 2
 flag_1_measureONLY_2_kalman = 2
 
 flag_saveImg = 1
 flag_publishImg = 0
-flag_1_undistort_2_homography_3_original = 1
+flag_1_undistort_2_homography_3_original = 2
 
 flag_is_compressed_image = 1
 flag_go_to_wrapper_or_save_subImage = 0
@@ -41,17 +42,29 @@ flag_print = 1
 ROS_TOPIC = 'remote/image_color/compressed'
 Qfactor = 0.001
 
-#non-fisheye
-path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
-path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
+path_load_image = []
+path_save_image = []
 kernelSize_close = (50, 50)
 kernelSize_open = (30, 30)
 
-#fisheye
-# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
-# path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
-# kernelSize_close = (50, 50)
-# kernelSize_open = (30, 30)
+def setParam():
+    global path_load_image, path_save_image, kernelSize_close, kernelSize_open, flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg
+    if flag_1_fisheye_2_non_fisheye == 2:
+        if flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 1:
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView/*.png'
+
+        elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 2 or flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 3:
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
+        path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
+        kernelSize_close = (50, 50)
+        kernelSize_open = (30, 30)
+
+    elif flag_1_fisheye_2_non_fisheye == 1:
+        # fisheye
+        path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
+        path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
+        kernelSize_close = (50, 50)
+        kernelSize_open = (30, 30)
 
 
 
@@ -750,8 +763,8 @@ class LineSegClass:
 
 
 
-            if self.flag_imshow_on == 1:
-                print('result of the redLineSeg is ', self.end_of_arrow, self.theta)
+            if self.flag_imshow_on == 2:
+                # print('result of the redLineSeg is ', self.end_of_arrow, self.theta)
                 cv2.namedWindow('redLineSeg')
                 # cv2.imshow('redLineSeg', np.concatenate((frame[:, :, 1], img_open), axis=1))
                 cv2.imshow('redLineSeg', frame)
@@ -1084,10 +1097,10 @@ class DataLoadClass:
 
         if flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 1:
             self.imgInst.imgHomography = self.calibInst.startHomography(self.imgInst.imgData)
-            self.imgInst.redLineSeg, _, _ = self.lineSegInst.redLineSegmentation(self.imgInst.imgHomography)
+            self.imgInst.redLineSeg = self.lineSegInst.redLineSegmentation(self.imgInst.imgHomography)
 
         elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 2:
-            self.imgInst.redLineSeg, _, _ = self.lineSegInst.redLineSegmentation(self.imgInst.imgData)
+            self.imgInst.redLineSeg = self.lineSegInst.redLineSegmentation(self.imgInst.imgData)
             
         elif flag_1_homoANDseg_2_segONLY_3_drawCircleFromSeg == 3:
             self.imgInst.imgData, _, _ = self.lineSegInst.redLineSegmentation(self.imgInst.imgData)
@@ -1137,8 +1150,9 @@ class Import_cctvView:
         self.lineSegInst = LineSegClass(flag_imshow_on=1, flag_print_on=1)
 
     def getCarLocationAngle(self, frame_cctv):
-        _, end_of_array, angle = self.lineSegInst.redLineSegmentation(frame_cctv)
-        return end_of_array, angle
+        # _, end_of_array, angle = self.lineSegInst.redLineSegmentation(frame_cctv)
+        # return end_of_array, angle
+        return self.lineSegInst.redLineSegmentation(frame_cctv)
 
 if __name__ == "__main__":
 
@@ -1148,6 +1162,7 @@ if __name__ == "__main__":
     # global count
     # global -> error here
     # count = 0
+    setParam()
 
     imgInst = ImgClass()
     calibInst = CalibClass()

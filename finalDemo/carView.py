@@ -22,8 +22,10 @@ from cctvView import KalmanFilterClass, Import_cctvView #, LineSegClass
 
 #flag
 flag_fisheye_to_undistort = 0
-flag_undistort_to_homography = 1
-flag_homography_to_warpAffine = 0
+flag_undistort_to_homography = 0
+flag_homography_to_warpAffine = 1
+
+flag_1_fisheye_2_non_fisheye = 2
 
 flag_1_subscribeImg_2_loadImgFile = 2
 flag_is_compressed_image = 1
@@ -44,15 +46,30 @@ flag_print = 1
 
 #parameter
 ROS_TOPIC = 'remote/image_color/compressed'#'jaesung_lens_camera/image_color'
-# if flag_undistort_to_homography == 1:
-path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView/*.png'
-# elif flag_homography_to_warpAffine == 1:
-# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView_homography/*.png'
-# elif flag_fisheye_to_undistort == 1:
-# path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView/*.png'
+path_load_image = []
+def setParam():
+    global path_load_image, path_save_image, path_cctv_homograph_image
+    if flag_1_fisheye_2_non_fisheye == 2:
+        path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
+        path_cctv_homograph_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
 
-path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
-path_cctv_homograph_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
+        if flag_undistort_to_homography == 1:
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView/*.png'
+        elif flag_homography_to_warpAffine == 1:
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView_homography/*.png'
+
+    elif flag_1_fisheye_2_non_fisheye == 1:
+        path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
+        path_cctv_homograph_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
+
+        if flag_undistort_to_homography == 1:
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView/*.png'
+        elif flag_homography_to_warpAffine == 1:
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView_homography/*.png'
+        elif flag_fisheye_to_undistort == 1:
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView/*.png'
+
+
 nameOf_pickle_Checkerboard_Detection = 'detect_result_jaesung_171021_1600_delete_files.pickle'
 path_pickle_calibration_variable = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/calib_result_JS_fisheye.pickle'
 fileList = []
@@ -62,7 +79,7 @@ mybalance = 0
 
 #parameter from cctvView.py
 shape_imgHomography=(616, 565)
-cameraLocation_in_carView = (210, 247)
+cameraLocation_in_carView = (200, 250)
 
 class calibClass:
     # you must check the checkboard which you would like to use for the calibration
@@ -127,20 +144,13 @@ class calibClass:
 
             self.homography_RANSAC, mask = cv2.findHomography(srcPoints=srcPixel_image,
                                                               dstPoints=dstPixel_ground,
-                                                              method=cv2.RANSAC)
+                                                              method=0)#cv2.RANSAC
             print('homography is ', self.homography_RANSAC)
 
             #do not calculate homography again
             self.flag_first_didHomography = 0
 
-        frame_homography_RANSAC = cv2.warpPerspective(frame, self.homography_RANSAC, (300, 300))#frame.shape[:2][::-1]
-        cv2.imshow('frame', frame)
-        cv2.imshow('warpPerspective', frame_homography_RANSAC)
-        cv2.waitKey(1)
-
-        # cv2.namedWindow('Transformation of undistorted frame of JS fisheye camera using homography')
-        # cv2.imshow('Transformation of undistorted frame of JS fisheye camera using homography', frame_homography_RANSAC)
-        # cv2.waitKey(1)
+        frame_homography_RANSAC = cv2.warpPerspective(frame, self.homography_RANSAC, (360, 300))#frame.shape[:2][::-1]
 
         return frame_homography_RANSAC
 
@@ -155,9 +165,10 @@ class ViewTransform:
         elif flag_1_subscribeImg_2_loadImgFile == 2:
             self.fileList_cctv = glob.glob(cctvViewPath)
             self.fileList_cctv = np.sort(self.fileList_cctv)
-            print('>> is the class Import_cctvView initialized?')
+            print('self.fileList_cctv', self.fileList_cctv)
+            # print('>> is the class Import_cctvView initialized?')
             self.import_cctvView_inst = Import_cctvView()
-            print('>> is the class Import_cctvView initialized? __init__ is needed ?') #yes
+            # print('>> is the class Import_cctvView initialized? __init__ is needed ?') #yes
             self.import_cctvView_inst.__int__()
 
     def getCarLocationAngle(self):
@@ -165,30 +176,35 @@ class ViewTransform:
         if flag_1_subscribeImg_2_loadImgFile == 2:
             # location = np.zeros(2, dtype=np.float32)
             global count
-            print(count)
-            return self.import_cctvView_inst.getCarLocationAngle(frame_cctv=cv2.imread(self.fileList_cctv[count]))
+            return self.import_cctvView_inst.getCarLocationAngle(frame_cctv=cv2.imread(self.fileList_cctv[count]))#[]##########################################################
 
         elif flag_1_subscribeImg_2_loadImgFile == 1:
             print('not finalize coding yet')
 
     def generate_car_roi_in_cctvView(self, frameCarView, emptyFrame=None):
-        carLocation, carAngle = self.getCarLocationAngle() #carLocation = (width, height), carAngle=(theta) refer to cctvView.py
-        # cameraLocation_in_carView = [429, 489]
+        frameCCTVView, carLocation, carAngle = self.getCarLocationAngle() #carLocation = (width, height), carAngle=(theta) refer to cctvView.py
         global cameraLocation_in_carView
-        matrixTranslate = np.float32([[1,0,(carLocation[0] - cameraLocation_in_carView[0])], [0, 1, (carLocation[1] - cameraLocation_in_carView[1])]])
-        matrixRotation = cv2.getRotationMatrix2D(center=tuple(np.divide(frameCarView.shape[:2][::-1],2)), angle=carAngle, scale=1)
+
+        matrixTranslate = np.float32([[1, 0, carLocation[0] - cameraLocation_in_carView[0]], [0, 1, carLocation[1] - cameraLocation_in_carView[1]]])
+        matrixRotation = cv2.getRotationMatrix2D(center=carLocation, angle=carAngle, scale=1)
         # print('matrixTranslate, matrixRotation, carLocation, carAngle is ')
         # print(matrixTranslate)
         # print(matrixRotation)
         # print(carLocation, carAngle)
-        # matrixRotation[:][2] = matrixTranslate
+        # matrixRotation[:][2] = matrixTranslate ##################################################################################
         # cv2.imshow('frameCarView', frameCarView)
-        # emptyFrame = cv2.warpAffine(src=frameCarView, M=matrixRotation, dsize=shape_imgHomography)
-        # cv2.imshow('rotation', emptyFrame)
-        # emptyFrame = cv2.warpAffine(src=emptyFrame, M=matrixTranslate, dsize=shape_imgHomography)
-        # cv2.imshow('translation', emptyFrame)
-        # cv2.waitKey(1)
-        return emptyFrame
+
+        emptyFrame = cv2.warpAffine(src=frameCarView, M=matrixTranslate, dsize=shape_imgHomography)
+        emptyFrame = cv2.warpAffine(src=emptyFrame, M=matrixRotation, dsize=shape_imgHomography)
+
+        #draw cameraLocation_in_cctvView
+        cv2.circle(emptyFrame, carLocation, radius=5, color=(0, 0, 255), thickness=4)
+        return self.alphaBlending(img1=frameCCTVView, img2=emptyFrame)
+
+    def alphaBlending(self, img1, img2):
+        alpha = 0.7
+        beta = (1 - alpha)
+        return cv2.addWeighted(src1=img1, alpha=alpha, src2=img2, beta=beta, gamma=0.0, dst=None, dtype=-1)
 
 class dataLoadClass:
 
@@ -298,6 +314,8 @@ class dataLoadClass:
 
         elif flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 1:
             self.imgInst.imgHomography = self.calibInst.startHomography(self.imgInst.imgData)
+            cv2.imshow('self.imgInst.imgHomography', np.concatenate((self.imgInst.imgHomography, cv2.resize(self.imgInst.imgData, (300, 300))), axis=1))
+            cv2.waitKey(1)
 
         elif flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 0 and flag_homography_to_warpAffine == 1:
             self.viewTransformInst.getCarLocationAngle()
@@ -315,15 +333,13 @@ class dataLoadClass:
                 print(e)
                 
         if flag_saveImg == 1:
-            # print('save iamge with name : ', path_save_image + nameOfFile[-9:])
-
             if flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 1:
+                # print('save iamge with name : ', path_save_image + 'carView_homography/' + nameOfFile[-9:])
                 cv2.imwrite(path_save_image + 'carView_homography/' + nameOfFile[-9:], self.imgInst.imgHomography)
 
             elif flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 0 and flag_homography_to_warpAffine == 1:
+                # print('save iamge with name : ', path_save_image + 'carView_2_cctvView/' + nameOfFile[-9:])
                 cv2.imwrite(path_save_image + 'carView_2_cctvView/' + nameOfFile[-9:], self.imgInst.imgWarp)
-
-
 
 class imgClass:
     height = 0
@@ -345,7 +361,7 @@ if __name__ == "__main__":
     # global count
     # global -> error here
     # count = 0
-
+    setParam()
     imgInst = imgClass()
     calibInst = calibClass()
     if flag_homography_to_warpAffine == 1:
