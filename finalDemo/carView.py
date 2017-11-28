@@ -4,7 +4,8 @@ from __future__ import print_function
 import numpy as np
 import cv2
 
-from std_msgs.msg import String
+# from std_msgs.msg import String
+from future_car_capstone.srv import *
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
@@ -21,11 +22,11 @@ import os
 from cctvView import KalmanFilterClass, Import_cctvView #, LineSegClass
 
 #flag
-flag_fisheye_to_undistort = 0
-flag_undistort_to_homography = 0
+flag_fisheye_to_undistort = 1
+flag_undistort_to_homography = 1
 flag_homography_to_warpAffine = 1
 
-flag_1_fisheye_2_non_fisheye = 2
+flag_1_fisheye_2_non_fisheye = 1
 
 flag_1_subscribeImg_2_loadImgFile = 2
 flag_is_compressed_image = 1
@@ -36,7 +37,7 @@ flag_publishImg = 0
 
 
 
-flag_go_to_wrapper_or_save_subImage = 0
+flag_1_go_wrapper_2_save_subImage = 1  ####################################################
 flag_saveImg_which_detect_checkerboard = 0
 
 flag_load_detected_result = 0
@@ -45,43 +46,48 @@ flag_print = 1
 
 
 #parameter
-ROS_TOPIC = 'remote/image_color/compressed'#'jaesung_lens_camera/image_color'
+ROS_TOPIC = 'remote/image_color/compressed'
 path_load_image = []
 def setParam():
-    global path_load_image, path_save_image, path_cctv_homograph_image
+    global path_load_image, path_save_image, path_cctv_homograph_image, cameraLocation_in_carView
+
+    #non_fisheye
     if flag_1_fisheye_2_non_fisheye == 2:
-        path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
-        path_cctv_homograph_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
+        path_save_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/'
+        path_cctv_homograph_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/cctvView_homography/*.png'
+        cameraLocation_in_carView = (200, 250)
 
         if flag_undistort_to_homography == 1:
-            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView/*.png'
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView/*.png'
         elif flag_homography_to_warpAffine == 1:
-            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView_homography/*.png'
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/non_fisheye_lens/carView_homography/*.png'
 
+    #fisheye
     elif flag_1_fisheye_2_non_fisheye == 1:
-        path_save_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
-        path_cctv_homograph_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
+        path_save_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/'
+        path_cctv_homograph_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_homography/*.png'
+        cameraLocation_in_carView = (199, 461) #(195, 271)
 
-        if flag_undistort_to_homography == 1:
-            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView/*.png'
+        if flag_fisheye_to_undistort == 1:
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView/*.png'
+        elif flag_undistort_to_homography == 1:
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView/*.png'
         elif flag_homography_to_warpAffine == 1:
-            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView_homography/*.png'
-        elif flag_fisheye_to_undistort == 1:
-            path_load_image = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView/*.png'
+            path_load_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/carView_homography/*.png'
 
 
 nameOf_pickle_Checkerboard_Detection = 'detect_result_jaesung_171021_1600_delete_files.pickle'
-path_pickle_calibration_variable = '/home/jaesungchoe/catkin_ws/src/futureCarCapstone/src/see-through-parking-using-augmented-reality/finalDemo/calib_result_JS_fisheye.pickle'
+path_pickle_calibration_variable = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/calib_result_JS_fisheye.pickle'
 fileList = []
 num_of_image_in_database = 1000
 count = 0
 mybalance = 0
 
-#parameter from cctvView.py
-shape_imgHomography=(616, 565)
-cameraLocation_in_carView = (200, 250)
 
-class calibClass:
+#parameter from cctvView.py
+shape_imgHomography=(616, 565) #(580, 481) #
+
+class calibClassCar:
     # you must check the checkboard which you would like to use for the calibration
     # if (9, 7) it means there are 10(=9+1) pactches in row, 8(=7+1) patches in column
     CHECKERBOARD = (9, 7)  # (8, 8)
@@ -115,42 +121,59 @@ class calibClass:
     def startUndistort(self, frame):
         # dim0 = frame.shape[:2][::-1] #(width, height)
         # dim0 = (self.width_trainImage, self.height_trainImage)
+        # frame=cv2.resize(src=frame, dsize=(1288, 964)) ########################################################################################################
 
         return cv2.fisheye.undistortImage(frame, self.camera_matrix, self.distCoeffs,
-                                                       Knew=self.camera_matrix, new_size=frame.shape[:2][::-1])#dim0
+                                                       Knew=self.camera_matrix, new_size=frame.shape[:2][::-1])#(1288, 964)
 
-    def startHomography(self, frame):
+    def startHomography(self, frame, reverse=0):
 
         if self.flag_first_didHomography == 1:
 
             srcPixel_image = np.array([
-                [288, 682], [400, 682], [525, 681], [663, 675], [802, 667], [ 932, 658],
-                [197, 713], [327, 715], [476, 716], [655, 711], [817, 700], [ 980, 681],
-                [117, 742], [255, 750], [435, 754], [646, 752], [850, 737], [1053, 715],
-                [ 12, 776], [157, 800], [367, 813], [637, 815], [906, 798], [1146, 761],
-                            [ 10, 868], [251, 917], [615, 934], [990, 905], [1279, 840]
+                #[205, 946], [656 ,918], [1116, 936],
+                            [207, 748], [435, 731], [653, 723], [875, 724], [1114, 732],
+                [202, 684], [358, 672], [505, 663], [652, 659], [800, 658], [952, 600],
+                [318, 643], [433, 636], [542, 631], [652, 628], [760, 625], [876, 626],
+                [475, 615], [564, 612], [652, 609], [740, 607],
+                [504, 600], [579, 599], [652, 595], [724, 594]
 
             ])
 
             dstPixel_ground = np.array([
-                            [80,   0], [120,   0], [160,   0], [200,   0], [240,   0], [280,   0]
-                          , [80,  40], [120,  40], [160,  40], [200,  40], [240,  40], [280,  40]
-                          , [80,  80], [120,  80], [160,  80], [200,  80], [240,  80], [280,  80]
-                          , [80, 120], [120, 120], [160, 120], [200, 120], [240, 120], [280, 120]
-                                      ,[120, 160], [160, 160], [200, 160], [240, 160], [280, 160]
+                                      #[90, 225], [135, 225], [180, 225],
+                           [45, 180], [90, 180], [135, 180], [180, 180], [225, 180],
+                [0, 135],  [45, 135], [90, 135], [135, 135], [180, 135], [225, 135],
+                [0, 90],   [45,  90], [90,  90], [135,  90], [180,  90], [225,  90],
+                           [45,  45], [90,  45], [135,  45], [180,  45],
+                           [45,   0], [90,   0], [135,   0], [180,   0]
             ])
+
+            # for i in range(dstPixel_ground.shape[0]):
+            #     dstPixel_ground[i][0] = dstPixel_ground[i][0] + 60
+
+            for i in range(dstPixel_ground.shape[0]):
+                dstPixel_ground[i][0] = dstPixel_ground[i][0] + 60
+                dstPixel_ground[i][1] = dstPixel_ground[i][1] + 180
 
             # srcPixel_image, dstPixel_ground = np.array(srcPixel_image), np.array(dstPixel_ground)
 
-            self.homography_RANSAC, mask = cv2.findHomography(srcPoints=srcPixel_image,
-                                                              dstPoints=dstPixel_ground,
-                                                              method=0)#cv2.RANSAC
+            #img to ground homography
+            if reverse == 0:
+                self.homography_RANSAC, mask = cv2.findHomography(srcPoints=srcPixel_image,
+                                                                    dstPoints=dstPixel_ground,
+                                                                    method=cv2.RANSAC)
+            #ground to img homogrphy
+            elif reverse == 1:
+                self.homography_RANSAC, mask = cv2.findHomography(dstPoints=srcPixel_image,
+                                                                    srcPoints=dstPixel_ground,
+                                                                    method=cv2.RANSAC)
             print('homography is ', self.homography_RANSAC)
 
             #do not calculate homography again
             self.flag_first_didHomography = 0
 
-        frame_homography_RANSAC = cv2.warpPerspective(frame, self.homography_RANSAC, (360, 300))#frame.shape[:2][::-1]
+        frame_homography_RANSAC = cv2.warpPerspective(frame, self.homography_RANSAC, (360, 300 + 180))#frame.shape[:2][::-1]
 
         return frame_homography_RANSAC
 
@@ -159,13 +182,17 @@ class ViewTransform:
     # carLocation = np.zeros(2, dtype=np.float32)
     def __init__(self, cctvViewTopic=None, cctvViewPath=None):
         print('in the __init__ of ViewTransforms')
-        if flag_1_subscribeImg_2_loadImgFile == 1:
-            print('later')
 
+        #subscribe cctv frames
+        if flag_1_subscribeImg_2_loadImgFile == 1:
+            self.import_cctvView_inst = Import_cctvView()
+            self.import_cctvView_inst.__int__()
+
+        #load cctv frames
         elif flag_1_subscribeImg_2_loadImgFile == 2:
             self.fileList_cctv = glob.glob(cctvViewPath)
             self.fileList_cctv = np.sort(self.fileList_cctv)
-            print('self.fileList_cctv', self.fileList_cctv)
+            print('>>>>> self.fileList_cctv', self.fileList_cctv)
             # print('>> is the class Import_cctvView initialized?')
             self.import_cctvView_inst = Import_cctvView()
             # print('>> is the class Import_cctvView initialized? __init__ is needed ?') #yes
@@ -179,14 +206,26 @@ class ViewTransform:
             return self.import_cctvView_inst.getCarLocationAngle(frame_cctv=cv2.imread(self.fileList_cctv[count]))#[]##########################################################
 
         elif flag_1_subscribeImg_2_loadImgFile == 1:
-            print('not finalize coding yet')
+            # print('dataLoadInst.serviceCarInfo()', dataLoadInst.serviceCarInfo(), 'count is ', count)
+            return dataLoadInst.serviceCarInfo()
 
     def generate_car_roi_in_cctvView(self, frameCarView, emptyFrame=None):
-        frameCCTVView, carLocation, carAngle = self.getCarLocationAngle() #carLocation = (width, height), carAngle=(theta) refer to cctvView.py
+        #why it is error???
+        # carLocation = np.zeros(2, dtype=np.int64)
+        # frameCCTVView, (carLocation[0], carLocation[1]), carAngle = self.getCarLocationAngle() #carLocation = (width, height), carAngle=(theta) refer to cctvView.py
+        if flag_1_subscribeImg_2_loadImgFile == 1:
+            #if None .........................it encounters errors 'NoneType' object is not iterable #############################################################################################
+            carLocation, carAngle = self.getCarLocationAngle() #carLocation = (width, height), carAngle=(theta) refer to cctvView.py
+            frameCCTVView = None
+        elif flag_1_subscribeImg_2_loadImgFile == 2:
+            frameCCTVView, carLocation, carAngle = self.getCarLocationAngle()  # carLocation = (width, height), carAngle=(theta) refer to cctvView.py
+
         global cameraLocation_in_carView
 
-        matrixTranslate = np.float32([[1, 0, carLocation[0] - cameraLocation_in_carView[0]], [0, 1, carLocation[1] - cameraLocation_in_carView[1]]])
-        matrixRotation = cv2.getRotationMatrix2D(center=carLocation, angle=carAngle, scale=1)
+        tmp = (carLocation[0] - cameraLocation_in_carView[0], carLocation[1] - cameraLocation_in_carView[1])
+        print('tep = ', tmp, 'carLocation = ', carLocation, 'cameraLocation_incarView = ', cameraLocation_in_carView)
+        matrixTranslate = np.float32([[1, 0, tmp[0]], [0, 1, tmp[1]]])
+        matrixRotation = cv2.getRotationMatrix2D(center=carLocation, angle=carAngle, scale=1)#carLocation
         # print('matrixTranslate, matrixRotation, carLocation, carAngle is ')
         # print(matrixTranslate)
         # print(matrixRotation)
@@ -198,11 +237,17 @@ class ViewTransform:
         emptyFrame = cv2.warpAffine(src=emptyFrame, M=matrixRotation, dsize=shape_imgHomography)
 
         #draw cameraLocation_in_cctvView
-        cv2.circle(emptyFrame, carLocation, radius=5, color=(0, 0, 255), thickness=4)
-        return self.alphaBlending(img1=frameCCTVView, img2=emptyFrame)
+        cv2.circle(emptyFrame, carLocation, radius=5, color=(0, 180, 180), thickness=4)
+        if frameCCTVView is None:
+            return emptyFrame.copy()
+
+        else:
+            print('shape of the frameCCTVView is ', frameCCTVView.shape[:2][::-1], emptyFrame.shape[:2][::-1])
+            return self.alphaBlending(img1=frameCCTVView, img2=emptyFrame)
+
 
     def alphaBlending(self, img1, img2):
-        alpha = 0.7
+        alpha = 0.3
         beta = (1 - alpha)
         return cv2.addWeighted(src1=img1, alpha=alpha, src2=img2, beta=beta, gamma=0.0, dst=None, dtype=-1)
 
@@ -236,11 +281,11 @@ class dataLoadClass:
     def loadImgInFolder(self):
         global fileList
         fileList = glob.glob(path_load_image)
-        # print('path_load_image is ', path_load_image)
+        print('>>>>> path_load_image is ', path_load_image)
 
         global num_of_image_in_database
         num_of_image_in_database = len(fileList)
-        # print('what is fileList', fileList, '\n')
+        print('what is fileList', fileList, '\n')
 
         global count
         fileList = np.sort(fileList)
@@ -251,14 +296,23 @@ class dataLoadClass:
 
             self.wrapper(nameOfFile=i)
             # tmp = cv2.imread(i)
-            # print('save the roi : _' + path_save_image + 'roi/' + i[-9:])
-            # cv2.imwrite(str(path_save_image + 'roi/' + i[-9:]), cv2.resize(tmp[190:440, 260:510], (0,0), fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC))
+            # print('save the roi : _' + path_save_image + 'roi/' + i[-10:])
+            # cv2.imwrite(str(path_save_image + 'roi/' + i[-10:]), cv2.resize(tmp[190:440, 260:510], (0,0), fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC))
 
     def publishImg(self):
         # http://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscriber%28python%29
-        print('start to publish JS image')
-        self.rospyPubImg = rospy.Publisher('calibration_JS_fisheye/image_calibrated', Image, queue_size=10)
+        self.rospyPubImg = rospy.Publisher('remote/image_annotated', Image, queue_size=10)
         rospy.Rate(10)  # 10Hz
+
+    def serviceCarInfo(self):
+        rospy.wait_for_service('desktop/carInfo')
+        try:
+            carInfo_Request = rospy.ServiceProxy('desktop/carInfo', carInfo)
+            carInfoResult = carInfo_Request(0)
+            # print('result of the service is', (carInfoResult.carLocation_width, carInfoResult.carLocation_height), carInfoResult.carAngle)
+            return (carInfoResult.carLocation_width, carInfoResult.carLocation_height), carInfoResult.carAngle
+        except rospy.ServiceException as e:
+            print('receiving service got error')
 
     def callback(self, data):
         global count
@@ -277,15 +331,14 @@ class dataLoadClass:
             else:
                 print('wrong flag_1_compressed_image... ')
 
-
-            global flag_go_to_wrapper_or_save_subImage
-            if flag_go_to_wrapper_or_save_subImage == 0:
+            global flag_1_go_wrapper_2_save_subImage
+            if flag_1_go_wrapper_2_save_subImage == 0:
                 tmp = self.imgInst.imgData
-                cv2.imwrite((path_save_image + str((count + 10000)) + '.png'), tmp)
+                cv2.imwrite((path_save_image + 'carView/' + str((count + 10000)) + '.png'), tmp)
                 cv2.imshow('hello', tmp)
-                cv2.waitKey(1)
+                cv2.waitKey(0)
 
-            elif flag_go_to_wrapper_or_save_subImage == 1:
+            elif flag_1_go_wrapper_2_save_subImage == 1:
                 # if you want to work asynchronously, edit the lines below
                 self.wrapper()
 
@@ -301,45 +354,71 @@ class dataLoadClass:
         self.calibInst.height = self.imgInst.height
         self.calibInst.width = self.imgInst.width
 
-        if flag_fisheye_to_undistort == 1 and flag_undistort_to_homography == 1:
-            # load Calibration results and show undistorted image
+        #undistort
+        if flag_fisheye_to_undistort == 1:
             if self.flag_first_didLoadVarCalibration == 1:
                 self.calibInst.loadVarAfterCalibration()
 
-                # do not come here again
+                #do not come here again
                 self.flag_first_didLoadVarCalibration = 0
-            
+
             self.imgInst.imgUndistort = self.calibInst.startUndistort(self.imgInst.imgData)
+
+        elif flag_fisheye_to_undistort == 0:
+            self.imgInst.imgUndistort = self.imgInst.imgData.copy()
+
+        else:
+            print('wrong flag_fisheye_to_undistort')
+
+        #homography
+        if flag_undistort_to_homography == 1:
             self.imgInst.imgHomography = self.calibInst.startHomography(self.imgInst.imgUndistort)
+        else:
+            self.imgInst.imgHomography = self.imgInst.imgUndistort.copy()
 
-        elif flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 1:
-            self.imgInst.imgHomography = self.calibInst.startHomography(self.imgInst.imgData)
-            cv2.imshow('self.imgInst.imgHomography', np.concatenate((self.imgInst.imgHomography, cv2.resize(self.imgInst.imgData, (300, 300))), axis=1))
-            cv2.waitKey(1)
-
-        elif flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 0 and flag_homography_to_warpAffine == 1:
+        #warp
+        if flag_homography_to_warpAffine == 1:
             self.viewTransformInst.getCarLocationAngle()
-            self.imgInst.imgWarp = np.zeros(shape_imgHomography, dtype=np.uint32)
-            self.imgInst.imgWarp = self.viewTransformInst.generate_car_roi_in_cctvView(self.imgInst.imgData, self.imgInst.imgWarp)
-            cv2.imshow('viewTransform display', self.imgInst.imgWarp)
-            cv2.waitKey(1)
-
-
+            # self.imgInst.imgWarp = np.zeros(shape_imgHomography, dtype=np.uint32)
+            self.imgInst.imgWarp = self.viewTransformInst.generate_car_roi_in_cctvView(self.imgInst.imgHomography, self.imgInst.imgWarp)
+        else:
+            self.imgInst.imgWarp = self.imgInst.imgHomography.copy()
 
         if flag_publishImg == 1:
             try:
-                self.rospyPubImg.publish(self.bridge.cv2_to_imgmsg(self.imgInst.imgUndistort, "bgr8"))
+                self.rospyPubImg.publish(self.bridge.cv2_to_imgmsg(self.imgInst.imgWarp, "bgr8"))
             except CvBridgeError as e:
                 print(e)
+        else:
+            cv2.imshow('self.imgInst.imgWarp', self.imgInst.imgWarp)
+            cv2.waitKey(1)
                 
-        if flag_saveImg == 1:
-            if flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 1:
-                # print('save iamge with name : ', path_save_image + 'carView_homography/' + nameOfFile[-9:])
-                cv2.imwrite(path_save_image + 'carView_homography/' + nameOfFile[-9:], self.imgInst.imgHomography)
+        if flag_saveImg == 1 and flag_1_subscribeImg_2_loadImgFile == 2:
+            # cv2.imwrite(path_save_image + 'carView/' + nameOfFile[-10:], self.imgInst.imgData)
 
-            elif flag_fisheye_to_undistort == 0 and flag_undistort_to_homography == 0 and flag_homography_to_warpAffine == 1:
-                # print('save iamge with name : ', path_save_image + 'carView_2_cctvView/' + nameOfFile[-9:])
-                cv2.imwrite(path_save_image + 'carView_2_cctvView/' + nameOfFile[-9:], self.imgInst.imgWarp)
+            if flag_fisheye_to_undistort == 1:
+                cv2.imwrite(path_save_image + 'carView_undistort/' + nameOfFile[-10:], self.imgInst.imgUndistort)
+
+            if flag_undistort_to_homography == 1:
+                cv2.imwrite(path_save_image + 'carView_homography/' + nameOfFile[-10:], self.imgInst.imgHomography)
+
+            if flag_homography_to_warpAffine == 1:
+                # print('save iamge with name : ', path_save_image + 'carView_2_cctvView/' + nameOfFile[-10:])
+                cv2.imwrite(path_save_image + 'carView_2_cctvView/' + nameOfFile[-10:], self.imgInst.imgWarp)
+
+        elif flag_saveImg == 1 and flag_1_subscribeImg_2_loadImgFile == 1:
+            cv2.imwrite((path_save_image + 'carView/' + str(100000 + count) + '.png'), self.imgInst.imgData)
+
+            if flag_fisheye_to_undistort == 1:
+                cv2.imwrite((path_save_image + 'carView_undistort/' + str(100000 + count) + '.png'), self.imgInst.imgUndistort)
+
+            if flag_undistort_to_homography == 1:
+                cv2.imwrite((path_save_image + 'carView_homography/' + str(100000 + count) + '.png'), self.imgInst.imgHomography)
+
+            if flag_homography_to_warpAffine == 1:
+                # print('save iamge with name : ', path_save_image + 'carView_2_cctvView/' + nameOfFile[-10:])
+                cv2.imwrite((path_save_image + 'carView_2_cctvView/' + str(100000 + count) + '.png'), self.imgInst.imgWarp)
+
 
 class imgClass:
     height = 0
@@ -350,8 +429,14 @@ class imgClass:
     imgWarp = None
 
     def saveImage(self, img):
-        self.imgData = img
+        if (964 != img.shape[0]) or (1288 != img.shape[1]): #(1288, 964) != img.shape[:2][::-1]
+            print('begin reshape the self.imgInst.imgData')
+            self.imgData = cv2.resize(src=img, dsize=(1288,964))
+        else:
+            self.imgData = img
+
         self.height, self.width = self.imgData.shape[:2]
+
 
 if __name__ == "__main__":
 
@@ -363,7 +448,7 @@ if __name__ == "__main__":
     # count = 0
     setParam()
     imgInst = imgClass()
-    calibInst = calibClass()
+    calibInst = calibClassCar()
     if flag_homography_to_warpAffine == 1:
         # global path_cctv_homograph_image # no global in here
         viewTransformInst = ViewTransform(cctvViewPath=path_cctv_homograph_image)
@@ -381,14 +466,19 @@ if __name__ == "__main__":
 
             if flag_publishImg == 1:
                 dataLoadInst.publishImg()
+                # while(True):
+                #     dataLoadInst.serviceCarInfo()
 
             rospy.spin()
 
        elif flag_1_subscribeImg_2_loadImgFile == 2:
+           if flag_publishImg == 1:
+               rospy.init_node('carView', anonymous=True)
+               dataLoadInst.publishImg()
+
            dataLoadInst.loadImgInFolder()
 
-           if flag_publishImg == 1:
-                dataLoadInst.publishImg()
+
 
     except KeyboardInterrupt:
         print("Shutting down")
