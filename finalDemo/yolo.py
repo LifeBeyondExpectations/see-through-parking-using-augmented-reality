@@ -100,12 +100,12 @@ class MyDarknet:
                     pixelLeftTop = (int(xLeftTop), int(yLeftTop))
                     pixelRightBottom = (int(xRightBottom), int(yRighttop))
                     cv2.rectangle(img=img, pt1=pixelLeftTop, pt2=pixelRightBottom, color=color_to_print, thickness=2)
-                    cv2.putText(img=img, text=label_to_put, org=pixelLeftTop,
+                    cv2.putText(img=img, text=label_to_put, org=(pixelLeftTop[0], pixelLeftTop[1] + 20),
                                 fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.8, color=color_to_print, thickness=2)
 
                     pixelRightBottom_result.append(pixelRightBottom)
                     pixelLeftTop_result.append(pixelLeftTop)
-                    label_result.append(self.label[objectClass])
+                    label_result.append(self.label[objectClass][:-1])
                     # cv2.circle(img=img, center=(int(x*img.shape[1]), int(y*img.shape[0])), radius=5, color=(0,0,255), thickness=2)
                     # cv2.circle(img=img, center=(int(width*img.shape[1]), int(height*img.shape[0])), radius=5, color=(0, 0, 255), thickness=2)
 
