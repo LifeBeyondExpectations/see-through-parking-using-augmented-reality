@@ -2,7 +2,7 @@
 import numpy as np
 import cv2
 import glob
-from cctvView_new import Import_cctvView
+from cctvView import Import_cctvView
 from math import pi
 
 # CarViewHomography_2_CctvViewHomography:
@@ -11,12 +11,13 @@ class ViewTransform:
     count = -1
     cameraLocation_in_carView = (310, 463)
 
-    def __init__(self, flag, cctvViewPath=None):
+    def __init__(self, flag, cctvViewPath=None, dataLoadInst=None):
         print('in the __init__ of ViewTransforms')
         self.flag_1_subscribeImg_2_loadImgFile = flag
 
         # subscribe cctv frames
         if self.flag_1_subscribeImg_2_loadImgFile == 1:
+            self.dataLoadInst = dataLoadInst
             self.import_cctvView_inst = Import_cctvView()
             self.import_cctvView_inst.__int__()
 
@@ -39,7 +40,7 @@ class ViewTransform:
 
         elif self.flag_1_subscribeImg_2_loadImgFile == 1:
             # print('dataLoadInst.serviceCarInfo()', dataLoadInst.serviceCarInfo(), 'count is ', count)
-            return dataLoadInst.serviceCarInfo()
+            return self.dataLoadInst.serviceInCarInfo()
 
     def generate_car_roi_in_cctvView(self, frameCarView, shape_imgHomography, emptyFrame=None):
         # why it is error???
@@ -47,6 +48,9 @@ class ViewTransform:
         # frameCCTVView, (carLocation[0], carLocation[1]), carAngle = self.getCarLocationAngle() #carLocation = (width, height), carAngle=(theta) refer to cctvView.py
         if self.flag_1_subscribeImg_2_loadImgFile == 1:
             # if None .........................it encounters errors 'NoneType' object is not iterable #############################################################################################
+
+            # bad idea. because carLocation need to become tuple
+            # carLocation = np.zeros(2, dtype=np.int32)
             carLocation, carAngle = self.getCarLocationAngle()  # carLocation = (width, height), carAngle=(theta) refer to cctvView.py
             frameCCTVView = None
         elif self.flag_1_subscribeImg_2_loadImgFile == 2:
@@ -55,12 +59,12 @@ class ViewTransform:
 
         tmp = (carLocation[0] - self.cameraLocation_in_carView[0], carLocation[1] - self.cameraLocation_in_carView[1])
         print('tep = ', tmp, 'carLocation = ', carLocation, 'cameraLocation_incarView = ', self.cameraLocation_in_carView)
-        matrixTranslate = np.float32([[1, 0, tmp[0]], [0, 1, tmp[1]]])
-        matrixRotation = cv2.getRotationMatrix2D(center=carLocation, angle=carAngle, scale=1)  # carLocation
+        # matrixTranslate = np.float32([[1, 0, tmp[0]], [0, 1, tmp[1]]])
+        # matrixRotation = cv2.getRotationMatrix2D(center=carLocation, angle=carAngle, scale=1)  # carLocation
 
         # merge the matrix makes seeThorugh less accurate
         # myEmptyFrame = frameCarView.copy()
-        myMatrix = matrixRotation.copy()
+        myMatrix = cv2.getRotationMatrix2D(center=carLocation, angle=carAngle, scale=1)
         myMatrix[0][2] = myMatrix[0][2] + tmp[0]
         myMatrix[1][2] = myMatrix[1][2] + tmp[1]
         emptyFrame = cv2.warpAffine(src=frameCarView, M=myMatrix, dsize=shape_imgHomography)

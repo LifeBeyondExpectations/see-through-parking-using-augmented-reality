@@ -19,7 +19,7 @@ count = 0
 param_cfg = 'cfg/yolo.cfg'
 param_model = 'yolo.weights'
 param_class_name = 'data/coco.names'
-min_confidence = 0.3
+min_confidence = 0.5
 
 path_load_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView/*.png'
 path_save_image = '/home/jaesungchoe/catkin_ws/src/future_car_capstone/src/see-through-parking-using-augmented-reality/finalDemo/fisheye_lens/cctvView_yolo/'
@@ -229,15 +229,20 @@ if __name__ == "__main__":
     print(cv2.__version__)
     print(cv2.__file__)
 
-    myDarknetInst = MyDarknet()
-    myDarknetInst.__int__() # do I have to write this initializer??
-    imgInst = ImgClass()
 
-    dataLoadInst = DataLoadClass(imgInst=imgInst, myDarknetInst=myDarknetInst)
-    dataLoadInst.loadImgInFolder()
-    # dataLoadInst.subscribeImg()
-    # dataLoadInst.publishImg()
-    #  rospy.spin()
+    try:
+        myDarknetInst = MyDarknet()
+        myDarknetInst.__int__() # do I have to write this initializer??
+        imgInst = ImgClass()
+
+        dataLoadInst = DataLoadClass(imgInst=imgInst, myDarknetInst=myDarknetInst)
+        dataLoadInst.loadImgInFolder()
+        # dataLoadInst.subscribeImg()
+        # dataLoadInst.publishImg()
+        #  rospy.spin()
+
+    except KeyboardInterrupt:
+        print("Shutting down")
 
 
 

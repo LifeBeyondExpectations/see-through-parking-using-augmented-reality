@@ -8,6 +8,7 @@ from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CompressedImage
 from future_car_capstone.srv import *
+from future_car_capstone.msg import *
 # impot roslib.load_manifest future_car_capstone.
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -20,6 +21,7 @@ from tempfile import TemporaryFile
 import glob
 import os
 from math import pi
+import time
 
 from yolo import MyDarknet
 from ImageClass import *
@@ -27,25 +29,27 @@ from Calibration import *
 from KalmanFilter import *
 from ViewTransform import *
 from LineSegmentation import *
-from carView_new import carView_import
+from carView import carView_import
 
 # from carView import calibClassCar,ViewTransform
 
 # flag
-flag_1_subscribeImg_2_loadImgFile_3_image2video = 2  ######################
+flag_1_subscribeImg_2_loadImgFile_3_image2video = 1  ######################
 flag_origin_to_homography = 1
 flag_homography_to_drawCircle = 1
-flag_drawCircle_to_carView = 1
+flag_find_empty_parking_lot = 1
+flag_drawCircle_to_carView = 0
+
 
 flag_is_YOLO = 1
 
 flag_1_fisheye_2_non_fisheye = 1
 flag_1_measureONLY_2_kalman = 2
 
-flag_saveImg = 1
-flag_publishImg = 0
+flag_saveImg = 0
+flag_publishImg = 1
 
-flag_is_compressed_image = 0
+flag_is_compressed_image = 1
 flag_go_to_wrapper_or_save_subImage = 1  #################################
 
 # flag which does not need fixing anymore
@@ -55,7 +59,7 @@ flag_load_detected_result = 0
 flag_print = 1
 
 # parameter
-topic_to_subscribe_image = 'desktop/image_color'  # /compressed'
+topic_to_subscribe_image = 'desktop/image_color/compressed'
 topic_to_publish_image = 'desktop/image_annotated'
 topic_to_service_out_carInfo = 'desktop/carInfo'
 topic_to_service_in_carInfo = 'remote/carInfo'
@@ -109,51 +113,67 @@ count = 0
 mybalance = 0
 
 
-shape_imgHomography = (616, 565)  # (580, 481) #(616, 565)
+shape_imgHomography = (550, 480) #(610, 565) is the all parking lot, 510 is only with visible area
 
 srcPixel_Img = np.array([
+    [173, 95], [229, 93], [286, 92], [460, 101],
+    [152, 170], [21, 169], [280, 169], [475, 176],
+    [120, 344], [188, 349],
+    [106, 426]
 
-                # 171128 data
-                [145, 117], [193, 113], [245, 108], [418, 104],
-                [119, 190], [169, 187], [224, 185], [418, 185],
+    # # 171202 data
+    # [165, 246], [200, 242], [238, 238], [367, 223],
+    # [146, 298], [183, 296], [224, 293], [370, 282],
+    #
+    # [109, 413], [150, 418],
+    # [ 96, 463]
 
-                [74, 342], [124, 350],
-                [57, 414]
+    # # 171128 data
+    # [145, 117], [193, 113], [245, 108], [418, 104],
+    # [119, 190], [169, 187], [224, 185], [418, 185],
+    #
+    # [74, 342], [124, 350],
+    # [57, 414]
 
-                # # 1288 * 964, 171122 data
-                # [145, 117], [653, 116], [748, 93],
-                # [539, 271], [622, 257], [719, 238],
-                #
-                # [511, 543], [650, 549]
+    # # 1288 * 964, 171122 data
+    # [286, 70], [326, 60], [370, 47],
+    # [268, 136], [312, 129], [358, 121],
+    #
+    # [274, 276], [323, 278]
 
-                ## 171125
-                # [138, 70], [181, 63], [232, 56], [401, 46],
-                # [112, 142], [158, 137], [211, 131], [399, 124],
-                #
-                # [70, 291], [118, 294],
-                # [56, 358]
-            ])
+    # ## 171125
+    # [138, 70], [181, 63], [232, 56], [401, 46],
+    # [112, 142], [158, 137], [211, 131], [399, 124],
+    #
+    # [70, 291], [118, 294],
+    # [56, 358]
+])
 
 dstPixel_ground = np.array([
-    # 171128 data
+    # # 171128 data
     [55, 0], [145, 0], [235, 0], [508, 0],
     [55, 155], [145, 155], [235, 155], [508, 155],
 
     [55, 405], [145, 405],
     [55, 510]
-
-    # 1288 * 964, 171122 data
+    # # 1288 * 964, 171122 data
     # [55, 0], [145, 0], [235, 0],
     # [55, 155], [145, 155], [235, 155],
     # [145, 405], [235, 405]
 
-    ## 171125
+
+    # ## 171125
     # [55, 0], [145, 0], [235, 0], [508, 0],
     # [55, 155], [145, 155], [235, 155], [508, 155],
     #
     # [55, 405], [145, 405],
     # [55, 510]
 
+])
+
+parkingLot = np.array([
+    [82, 59], [190, 65], [282, 51], [374, 55], [460, 62],
+    [98, 426], [200, 429], [300, 424]
 ])
 
 class DataLoadClass:
@@ -187,9 +207,10 @@ class DataLoadClass:
             # rospy.init_node('DataLoadClass', anonymous=True)
             self.rospySubImg = rospy.Subscriber(topic_to_subscribe_image, Image, self.callback)
             # automatically go to the callback function : self.callback()
+            # rospy.Rate(1)  # 10Hz
 
         elif flag_is_compressed_image == 1:
-            self.rospySubImg = rospy.Subscriber(topic_to_subscribe_image, CompressedImage, self.callback, queue_size=1)
+            self.rospySubImg = rospy.Subscriber(topic_to_subscribe_image, CompressedImage, self.callback, queue_size=10)
 
         else:
             print('flag_is_compressed_image is wrong')
@@ -199,6 +220,9 @@ class DataLoadClass:
         count = count + 1
 
         try:
+
+            start = time.time()
+
             if flag_is_compressed_image == 0:
                 # parse message into image
                 # bgr8: CV_8UC3, color image with blue-green-red color order and 8bit
@@ -223,6 +247,10 @@ class DataLoadClass:
 
             else:
                 print('wrong flag_go_to_wrapper_or_save_sub_Images')
+
+            end = time.time()
+            seconds = end - start
+            print('>>> fps = ', seconds, '(sec)')
 
         except CvBridgeError as e:
             print(e)
@@ -270,6 +298,9 @@ class DataLoadClass:
         out.release()
         cv2.destroyAllWindows()
 
+    def publishCarInfoArduino(self):
+        self.rospyPubCarInfoArduino = rospy.Publisher('desktop/carInfoArduino', carInfoArduino, queue_size=10)
+
     def publishImg(self):
         # http://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscriber%28python%29
         print('start to publish JS image')
@@ -282,8 +313,8 @@ class DataLoadClass:
         self.rospyServiceCarInfo = rospy.Service(topic_to_service_out_carInfo, carInfo, self.carInfo_Request)
 
     def carInfo_Request(self, req):
-        print('carInfo_Request : ', (self.carLocation[0], self.carLocation[1]), self.carAngle)
-        return carInfoResponse(self.carLocation[0], self.carLocation[1], self.carAngle)
+        # print('carInfo_Request : ', int(self.carLocation[0]), int(self.carLocation[1]), self.carAngle, (0,0,0,0,0,0,0,0,0), self.imgInst.width, self.imgInst.height)
+        return carInfoResponse(int(self.carLocation[0]), int(self.carLocation[1]), float(self.carAngle), (0,0,0,0,0,0,0,0,0), int(self.imgInst.width), int(self.imgInst.height))#tuple(np.zeros((3,3), dtype=np.float32))
 
     def wrapper(self, nameOfFile=None):
         global count, flag_homography_to_drawCircle, flag_origin_to_homography, flag_is_YOLO
@@ -294,9 +325,15 @@ class DataLoadClass:
         else:
             self.imgInst.imgHomography = self.imgInst.imgData
 
+        global flag_find_empty_parking_lot
+        if flag_find_empty_parking_lot == 1:
+            global parkingLot
+            self.lineSegInst.emptyParkingLotDetection(frame=imgInst.imgHomography, parkingLotCenter=parkingLot) ################################################################
+
+
         ### homography to drawCirble ###
         # not use yolo
-        if flag_homography_to_drawCircle == 1 and flag_is_YOLO == 2:
+        if flag_homography_to_drawCircle == 1 and flag_is_YOLO == 0:
             self.imgInst.redLineSeg = self.lineSegInst.redLineSegmentation(self.imgInst.imgHomography)
             self.imgInst.imgDrawCircle, self.carLocation, self.carAngle = self.lineSegInst.startDrawCircle(frame=self.imgInst.imgHomography.copy(), img_open=self.imgInst.redLineSeg)
 
@@ -311,7 +348,7 @@ class DataLoadClass:
             label_index = 0
             # print('label_result=', label_result, 'pixelLeftTop_result=', pixelLeftTop_result, 'pixelRightBottom_result', pixelRightBottom_result)
             for label in label_result:
-                if label == 'cell phone' or label == 'car':
+                if label == 'cell phone' or label == 'car' or label == 'suitcase' or label == 'skateboard':
                     car_index = label_index
                     break
                 else:
@@ -344,25 +381,30 @@ class DataLoadClass:
         global flag_drawCircle_to_carView
         if flag_drawCircle_to_carView == 1:
 
-            if self.flag_first_set_homography_ground_to_carView == 1:
-                global flag_1_subscribeImg_2_loadImgFile_3_image2video
-                if flag_1_subscribeImg_2_loadImgFile_3_image2video == 1:
+            # if self.flag_first_set_homography_ground_to_carView == 1:
+            global flag_1_subscribeImg_2_loadImgFile_3_image2video
+            if flag_1_subscribeImg_2_loadImgFile_3_image2video == 1:
+                rospy.wait_for_service('remote/carInfo')
+                try:
                     carInfo_Request = rospy.ServiceProxy(topic_to_service_in_carInfo, carInfo)
-                    carInfoResult = carInfo_Request(1)
-                    self.homography_to_carView = np.reshape(carInfoResult.carViewHomogrphy, newshape=(3, 3))
-                    self.carViewShape = (carInfoResult.carViewWidth, carInfoResult.carViewHeight)
+                    getServiceInData = carInfo_Request(0)
+                    # print(getServiceInData)
+                    self.homography_to_carView = np.reshape(getServiceInData.carViewHomography, newshape=(3, 3))
+                    self.carViewShape = (getServiceInData.carViewWidth, getServiceInData.carViewHeight)
+                except rospy.ServiceException as e:
+                    print('receiving service got error', e)
 
-                elif flag_1_subscribeImg_2_loadImgFile_3_image2video == 2:
-                    carViewInst = carView_import()
-                    carViewInst.__init__()
-                    self.homography_to_carView, _ = carViewInst.setCarViewHomography()
-                    print('sef.homography_to_carView is ', self.homography_to_carView)
-                    self.carViewShape = carViewInst.setCarViewShape()
+            elif flag_1_subscribeImg_2_loadImgFile_3_image2video == 2:
+                carViewInst = carView_import()
+                carViewInst.__init__()
+                self.homography_to_carView, _ = carViewInst.setCarViewHomography()
+                print('sef.homography_to_carView is ', self.homography_to_carView)
+                self.carViewShape = carViewInst.setCarViewShape()
 
-                    print('self.homography_to_carView = ', self.homography_to_carView, np.shape(self.homography_to_carView))
+                print('self.homography_to_carView = ', self.homography_to_carView, np.shape(self.homography_to_carView))
 
-                # do not come here again
-                self.flag_first_set_homography_ground_to_carView = 2
+                # # do not come here again
+                # self.flag_first_set_homography_ground_to_carView = 2
 
             ## rotation ##
             matrixRotation = cv2.getRotationMatrix2D(center=self.carLocation, angle=360 - self.carAngle, scale=1)
@@ -398,7 +440,7 @@ class DataLoadClass:
         ## save frames ##
         if flag_saveImg == 1:
             if flag_1_subscribeImg_2_loadImgFile_3_image2video == 2:
-                # cv2.imwrite(path_save_image + 'cctvView/' + nameOfFile[-10:], self.imgInst.imgData)
+                cv2.imwrite(path_save_image + 'cctvView/' + nameOfFile[-10:], self.imgInst.imgData)
 
                 if flag_origin_to_homography == 1:
                     # print('save iamge with name : ', path_save_image + 'cctvView_homography/' + nameOfFile[-10:])
@@ -432,17 +474,34 @@ class DataLoadClass:
                     cv2.imwrite((path_save_image + 'cctvView_redLineSeg/' + str(100000 + count) + '.png'), self.imgInst.redLineSeg)
                     cv2.imwrite((path_save_image + 'cctvView_center/' + str(100000 + count) + '.png'), self.imgInst.imgDrawCircle)
 
-                if flag_DrawCircle_to_carView == 1:
+                if flag_drawCircle_to_carView == 1:
                     print('save iamge with name : ', path_save_image + 'cctvView_2_carView/' + nameOfFile[-10:])
                     cv2.imwrite(path_save_image + 'cctvView_2_carView/' + nameOfFile[-10:], self.imgInst.imgSeeThrough)
+        else:
+        #     # cv2.imshow('self.imgInst.redLineSeg', self.imgInst.redLineSeg)
+        #     cv2.imshow('self.imgInst.imgHomography', self.imgInst.imgHomography)
+        #     cv2.imshow('drawCircle', self.imgInst.imgDrawCircle)
+            cv2.imshow('self.imgInst.imgDrawCircle', cv2.resize(np.concatenate((self.imgInst.imgDrawCircle,
+                                                                     self.imgInst.imgYOLO,
+                                                                     np.stack((self.imgInst.redLineSeg,
+                                                                               self.imgInst.redLineSeg,
+                                                                               self.imgInst.redLineSeg), axis=2)), axis=1), (0,0), fx=0.5, fy=0.5))
+
+            cv2.waitKey(1)
 
         # re-publish processed images
         if flag_publishImg == 1:
             try:
                 self.rospyPubImg.publish(self.bridge.cv2_to_imgmsg(self.imgInst.imgSeeThrough, "bgr8"))
+                # tmp = carInfoArduino()
+                # tmp.carLocationWidth = self.carLocation[0]
+                # tmp.carLocationHeight = self.carLocation[1]
+                # tmp.carAngle = self.carAngle
+                # self.rospyPubCarInfoArduino.publish(tmp)
                 
             except CvBridgeError as e:
                 print(e)
+
 
 
 
@@ -473,7 +532,7 @@ class Import_cctvView:
 
         # subscribe cctv images
         if frame_cctv is None:
-            dataLoadInst.serviceCarInfo()
+            dataLoadInst.servicepCarInfo()
 
         # load cctv images in the folders
         else:
@@ -501,6 +560,7 @@ if __name__ == "__main__":
             # One python file for one init_node
             if flag_publishImg == 1:
                 dataLoadInst.publishImg()
+                dataLoadInst.publishCarInfoArduino()
                 dataLoadInst.serviceCarInfo()
 
             dataLoadInst.subscribeImg()
@@ -509,6 +569,7 @@ if __name__ == "__main__":
         elif flag_1_subscribeImg_2_loadImgFile_3_image2video == 2:
             if flag_publishImg == 1:
                 dataLoadInst.publishImg()
+                dataLoadInst.publishCarInfoArduino()
                 dataLoadInst.serviceCarInfo()
 
             dataLoadInst.loadImgInFolder()

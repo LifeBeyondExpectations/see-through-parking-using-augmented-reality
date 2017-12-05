@@ -27,6 +27,7 @@ class Calibration:
             print('distort Coeffs is ')
             print(self.distCoeffs)
             print('width, height is ', self.width_trainImage, self.height_trainImage)
+            cv2.waitKey(0)
 
     def startUndistort(self, frame):
         return cv2.fisheye.undistortImage(frame, self.camera_matrix, self.distCoeffs,
