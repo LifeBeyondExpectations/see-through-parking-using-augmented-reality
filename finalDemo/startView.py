@@ -4,7 +4,7 @@
 import numpy as np
 import cv2
 
-from std_msgs.msg import Float32MultiArray, MultiArrayDimension
+from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CompressedImage
 from future_car_capstone.srv import *
@@ -13,7 +13,14 @@ from future_car_capstone.msg import *
 from cv_bridge import CvBridge, CvBridgeError
 
 import rospy
+import roslib
+
+import pickle
+from tempfile import TemporaryFile
+
 import glob
+import os
+from math import pi
 import time
 
 from yolo import MyDarknet
@@ -27,7 +34,8 @@ from carView import carView_import
 # from carView import calibClassCar,ViewTransform
 
 # flag
-flag_1_subscribeImg_2_loadImgFile_3_image2video = 2  ######################
+flag_1_subscribeImg_2_loadImgFile_3_image2video = 1  ######################
+flag_fisheye_to_undistort = 1
 flag_origin_to_homography = 0
 flag_homography_to_drawCircle = 1
 flag_find_empty_parking_lot = 0
@@ -39,7 +47,7 @@ flag_is_YOLO = 1
 flag_1_fisheye_2_non_fisheye = 1
 flag_1_measureONLY_2_kalman = 2
 
-flag_saveImg = 1
+flag_saveImg = 0
 flag_publishImg = 1
 
 flag_is_compressed_image = 1
@@ -49,14 +57,12 @@ flag_go_to_wrapper_or_save_subImage = 1  #################################
 flag_saveImg_which_detect_checkerboard = 0
 flag_load_calibrated_result = 1
 flag_load_detected_result = 0
-flag_print = 0
+flag_print = 1
 
 # parameter
-cctvLocation3D = (235, 520, 530) ##########################################################################
-carLocationDepth = 30
-
-topic_to_subscribe_image = 'desktop/image_color/compressed'
-topic_to_publish_image = 'desktop/image_annotated'
+topic_to_subscribe_image = 'remote/image_color/compressed'
+#topic_to_subscribe_image = 'desktop/image_color/compressed'
+topic_to_publish_image = 'startView/image_annotated'
 topic_to_service_out_carInfo = 'desktop/carInfo'
 topic_to_service_in_carInfo = 'remote/carInfo'
 Qfactor = 0.1
@@ -114,12 +120,15 @@ shape_imgHomography = (620, 800)
 #(610, 565) is the all parking lot, 510 is only with visible area
 
 srcPixel_Img = np.array([
-    # i do not know
-    [148,  48], [201,  45], [259,  42], [437,  48],
-    [124, 123], [184, 121], [247, 120], [447, 124],
+    #starting cctv
+    [130, 186], [913, 357],
+    [135, 576], [401, 556], [486, 557], [576, 552], [663, 544], [751, 542]
 
-    [ 88, 295], [153, 300],
-    [ 78, 369]
+    # i do not know
+    # [173, 95], [229, 93], [286, 92], [460, 101],
+    # [152, 170], [21, 169], [280, 169], [475, 176],
+    # [120, 344], [188, 349],
+    # [106, 426]
 
     # # 171202 data
     # [165, 246], [200, 242], [238, 238], [367, 223],
@@ -151,14 +160,16 @@ srcPixel_Img = np.array([
 
 dstPixel_ground = np.array([
 
+    #starting CCTV
+    [323, 405], [616, 452],
+    [323, 565], [436, 565], [466, 565], [496, 565], [526, 565], [556, 565]
+
     # # # 171128 data
-    [55,   0], [145,   0], [235,   0], [508,   0],
-    [55, 155], [145, 155], [235, 155], [508, 155],
-
-    [55, 405], [145, 405],
-    [55, 510]
-
-
+    # [55, 0], [145, 0], [235, 0], [508, 0],
+    # [55, 155], [145, 155], [235, 155], [508, 155],
+    #
+    # [55, 405], [145, 405],
+    # [55, 510]
     # # 1288 * 964, 171122 data
     # [55, 0], [145, 0], [235, 0],
     # [55, 155], [145, 155], [235, 155],
@@ -173,9 +184,8 @@ dstPixel_ground = np.array([
     # [55, 510]
 ])
 
-parkingLot = np.array([
-    [82, 59], [190, 65], [282, 51], [374, 55], [460, 62],
-    [98, 426], [200, 429], [300, 424]
+startingPoint = np.array([
+    [436, 565], [466, 565], [496, 565], [526, 565], [556, 565]
 ])
 
 class DataLoadClass:
@@ -187,13 +197,15 @@ class DataLoadClass:
 
     def __init__(self, imgInst, calibInst, homographyInst=None):
         self.imgInst = imgInst
+
         self.calibInst = calibInst
+
+
         self.bridge = CvBridge()
-
-        global cctvLocation3D, carLocationDepth
-        self.lineSegInst = LineSegClass(flag_imshow_on=1, flag_print_on=1, cctvLocation3D=cctvLocation3D, carLocationDepth=carLocationDepth)
-
+        self.lineSegInst = LineSegClass(flag_imshow_on=1, flag_print_on=1)
         self.homographyInst = homographyInst
+
+
 
         global flag_origin_to_homography, shape_imgHomography
         if flag_origin_to_homography == 1 and self.homographyInst is not None:
@@ -249,7 +261,6 @@ class DataLoadClass:
                 # if you want to work asynchronously, edit the lines below
                 self.wrapper()
 
-
             else:
                 print('wrong flag_go_to_wrapper_or_save_sub_Images')
 
@@ -258,7 +269,7 @@ class DataLoadClass:
             print('>>> fps = ', seconds, '(sec)')
 
         except CvBridgeError as e:
-            print('bridge error', e)
+            print(e)
 
     def loadImgInFolder(self):
         global fileList
@@ -303,9 +314,6 @@ class DataLoadClass:
         out.release()
         cv2.destroyAllWindows()
 
-    def publishCarInfoArduino(self):
-        self.rospyPubCarInfoArduino = rospy.Publisher('led_out', Float32MultiArray, queue_size=10)
-
     def publishImg(self):
         # http://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscriber%28python%29
         print('start to publish JS image')
@@ -324,18 +332,26 @@ class DataLoadClass:
     def wrapper(self, nameOfFile=None):
         global count, flag_homography_to_drawCircle, flag_origin_to_homography, flag_is_YOLO
 
+        # undistort
+        if flag_fisheye_to_undistort == 1:
+            if self.flag_first_didLoadVarCalibration == 1:
+                self.calibInst.loadVarAfterCalibration()
+
+                # do not come here again
+                self.flag_first_didLoadVarCalibration = 0
+
+            self.imgInst.imgUndistort = self.calibInst.startUndistort(self.imgInst.imgData)[300:900, 400:800, :]
+            # cv2.imshow('self.imgInst.imgUndistort', cv2.resize(np.concatenate((self.imgInst.imgUndistort, self.imgInst.imgData), axis=1), (0,0), fx=0.3, fy=0.3))
+            # cv2.waitKey(1)
+
+        elif flag_fisheye_to_undistort == 0:
+            self.imgInst.imgUndistort = self.imgInst.imgData
+
         ### origin image to homography ###
         if flag_origin_to_homography == 1:
-            self.imgInst.imgHomography = self.homographyInst.startHomography(self.imgInst.imgData)
+            self.imgInst.imgHomography = self.homographyInst.startHomography(self.imgInst.imgUndistort)
         else:
-            self.imgInst.imgHomography = self.imgInst.imgData
-
-
-        global flag_find_empty_parking_lot
-        if flag_find_empty_parking_lot == 1:
-            global parkingLot
-            self.lineSegInst.emptyParkingLotDetection(frame=imgInst.imgHomography, parkingLotCenter=parkingLot) ################################################################
-
+            self.imgInst.imgHomography = self.imgInst.imgUndistort.copy()
 
         ### homography to drawCirble ###
         # not use yolo
@@ -372,16 +388,26 @@ class DataLoadClass:
                                                                                pixelLeftTop=pixelLeftTop_result[car_index],
                                                                                pixelRightBottom=pixelRightBottom_result[car_index])
 
-            cv2.imshow('>> self.imgInst.redLineSeg', self.imgInst.redLineSeg)
-            if self.imgInst.redLineSeg is None:
-                print('self.imgInst.redLineSeg is None')
-            if self.imgInst.imgHomography is None:
-                print('self.imgInst.imgHomography is None')
-
-            cv2.waitKey(1)
             # extract car information
             self.imgInst.imgDrawCircle, self.carLocation, self.carAngle = self.lineSegInst.startDrawCircle(frame=self.imgInst.imgHomography.copy(),
                                                                                                            img_open=self.imgInst.redLineSeg)
+            global startingPoint
+            min = 999999
+            answer = -1
+            num = 0
+            for each in startingPoint:
+                tmp = (np.power((self.carLocation[0] - each[0]), 2) + np.power((self.carLocation[1] - each[1]), 2))
+                if min > tmp:
+                    min = tmp
+                    answer = num
+                else:
+                    num = num + 1
+
+            print('answer = ', answer, 'min=', min, 'angle', self.carAngle)
+            cv2.putText(img=self.imgInst.imgDrawCircle, text=str(answer), org=tuple(startingPoint[answer]),
+                        fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(0, 0, 250), thickness=3)
+
+
 
         else:
             self.imgInst.redLineSeg = self.imgInst.imgHomography
@@ -452,25 +478,7 @@ class DataLoadClass:
 
         ## save frames ##
         if flag_saveImg == 1:
-            if flag_1_subscribeImg_2_loadImgFile_3_image2video == 1:
-                cv2.imwrite(path_save_image + 'cctvView/' + str(100000 + count) + '.png', self.imgInst.imgData)
-
-                # print('save iamge with name : ', path_save_image + 'cctvView_homography/' + str(100000 + count) + '.png')
-                # cv2.imwrite((path_save_image + 'cctvView_homography/' + str(100000 + count) + '.png'), self.imgInst.imgHomography)
-                #
-                # if flag_is_YOLO == 1:
-                #     cv2.imwrite((path_save_image + 'cctvView_yolo/' + str(100000 + count) + '.png'), self.imgInst.imgYOLO)
-                #
-                # if flag_homography_to_drawCircle == 1:
-                #     # print('save iamge with name : ', path_save_image + 'cctvView_redLineSeg/' + str(100000 + count) + '.png')
-                #     cv2.imwrite((path_save_image + 'cctvView_redLineSeg/' + str(100000 + count) + '.png'), self.imgInst.redLineSeg)
-                #     cv2.imwrite((path_save_image + 'cctvView_center/' + str(100000 + count) + '.png'), self.imgInst.imgDrawCircle)
-                #
-                # if flag_drawCircle_to_carView == 1:
-                #     # print('save iamge with name : ', path_save_image + 'cctvView_2_carView/' + nameOfFile[-10:])
-                #     cv2.imwrite(path_save_image + 'cctvView_2_carView/' + str(100000 + count) + '.png', self.imgInst.imgSeeThrough)
-
-            elif flag_1_subscribeImg_2_loadImgFile_3_image2video == 2:
+            if flag_1_subscribeImg_2_loadImgFile_3_image2video == 2:
                 cv2.imwrite(path_save_image + 'cctvView/' + nameOfFile[-10:], self.imgInst.imgData)
 
                 if flag_origin_to_homography == 1:
@@ -492,37 +500,34 @@ class DataLoadClass:
                     cv2.imwrite(path_save_image + 'cctvView_2_carView/' + nameOfFile[-10:], self.imgInst.imgSeeThrough)
 
 
-        #     # cv2.imshow('self.imgInst.redLineSeg', self.imgInst.redLineSeg)
+            elif flag_1_subscribeImg_2_loadImgFile_3_image2video == 1:
+                cv2.imwrite(path_save_image + 'cctvView/' + str(100000 + count) + '.png', self.imgInst.imgData)
+                print('save iamge with name : ', path_save_image + 'cctvView_homography/' + str(100000 + count) + '.png')
+                cv2.imwrite((path_save_image + 'cctvView_homography/' + str(100000 + count) + '.png'), self.imgInst.imgHomography)
+
+                if flag_is_YOLO == 1:
+                    cv2.imwrite((path_save_image + 'cctvView_yolo/' + str(100000 + count) + '.png'), self.imgInst.imgYOLO)
+
+                if flag_homography_to_drawCircle == 1:
+                    print('save iamge with name : ', path_save_image + 'cctvView_redLineSeg/' + str(100000 + count) + '.png')
+                    cv2.imwrite((path_save_image + 'cctvView_redLineSeg/' + str(100000 + count) + '.png'), self.imgInst.redLineSeg)
+                    cv2.imwrite((path_save_image + 'cctvView_center/' + str(100000 + count) + '.png'), self.imgInst.imgDrawCircle)
+
+                if flag_drawCircle_to_carView == 1:
+                    print('save iamge with name : ', path_save_image + 'cctvView_2_carView/' + nameOfFile[-10:])
+                    cv2.imwrite(path_save_image + 'cctvView_2_carView/' + nameOfFile[-10:], self.imgInst.imgSeeThrough)
+
+        cv2.imshow('sefl.imgInst.imgUndistort', self.imgInst.imgUndistort)
         # cv2.imshow('self.imgInst.imgHomography', self.imgInst.imgHomography)
-        cv2.imshow('drawCircle', self.imgInst.imgDrawCircle)
-        #     cv2.imshow('self.imgInst.imgDrawCircle', cv2.resize(np.concatenate((self.imgInst.imgDrawCircle,
-        #                                                              self.imgInst.imgYOLO,
-        #                                                              np.stack((self.imgInst.redLineSeg,
-        #                                                                        self.imgInst.redLineSeg,
-        #                                                                        self.imgInst.redLineSeg), axis=2)), axis=1), (0,0), fx=0.5, fy=0.5))
+        cv2.imshow('self.imgInst.imgHomography', self.imgInst.imgDrawCircle)
+        # if self.imgInst.imgYOLO is not None:
+        #      cv2.imshow('self.imgInst.imgYOLO', self.imgInst.imgYOLO)
         cv2.waitKey(1)
 
         # re-publish processed images
         if flag_publishImg == 1:
             try:
-                self.rospyPubImg.publish(self.bridge.cv2_to_imgmsg(self.imgInst.imgSeeThrough, "bgr8"))
-
-                tmp = Float32MultiArray()
-                # tmp.data.clear()
-                # tmp.data.push_back(1)
-                tmp.layout.dim = [] #MultiArrayDimension()
-
-                # tmp.layout.dim = tuple(['test', 3, 1])
-                # tmp.layout.dim.label = str('test')
-                # tmp.layout.dim.size = 3
-                # tmp.layout.dim.stride = 1
-
-                # tmp.layout.data_offset = 0
-
-                tmp.data = [self.carLocation[0], self.carLocation[1], self.carAngle]
-                # tmp.data.length = 3
-                self.rospyPubCarInfoArduino.publish(tmp)
-
+                self.rospyPubImg.publish(self.bridge.cv2_to_imgmsg(self.imgInst.imgDrawCircle, "bgr8"))
                 # tmp = carInfoArduino()
                 # tmp.carLocationWidth = self.carLocation[0]
                 # tmp.carLocationHeight = self.carLocation[1]
@@ -543,9 +548,7 @@ class Import_cctvView:
         self.imgInst = ImageClass()
         self.calibInst = Calibration()
         self.dataLoadInst = DataLoadClass(self.imgInst, self.calibInst)
-
-        global cctvLocation3D, carLocationDepth
-        self.lineSegInst = LineSegClass(flag_imshow_on=1, flag_print_on=1, cctvLocation3D=cctvLocation3D, carLocationDepth=carLocationDepth)
+        self.lineSegInst = LineSegClass(flag_imshow_on=1, flag_print_on=1)
 
         global flag_origin_to_homography, flag_homography_to_drawCircle
         flag_origin_to_homography = 1
@@ -592,7 +595,6 @@ if __name__ == "__main__":
             # One python file for one init_node
             if flag_publishImg == 1:
                 dataLoadInst.publishImg()
-                dataLoadInst.publishCarInfoArduino()
                 dataLoadInst.serviceCarInfo()
 
             dataLoadInst.subscribeImg()
@@ -601,7 +603,6 @@ if __name__ == "__main__":
         elif flag_1_subscribeImg_2_loadImgFile_3_image2video == 2:
             if flag_publishImg == 1:
                 dataLoadInst.publishImg()
-                dataLoadInst.publishCarInfoArduino()
                 dataLoadInst.serviceCarInfo()
 
             dataLoadInst.loadImgInFolder()

@@ -688,8 +688,8 @@ class dataLoadType:
 
     def subscribeMultiImage_Async(self):
         print('start to subscribe Multi images asynchronously')
-        subImg_JS = message_filters.Subscriber('desktop/image_annotated', Image)
-        subImg_Francois = message_filters.Subscriber('remote/image_annotated', Image)
+        subImg_JS = message_filters.Subscriber('desktop/image_annotated', Image) ##################################################################################
+        subImg_Francois = message_filters.Subscriber('startView/image_annotated', Image)
         # subImg_cctv = message_filters.Subscriber('cctv_camera/image_republished', Image)
         ts = message_filters.ApproximateTimeSynchronizer([subImg_JS, subImg_Francois], 10, 5)
 
@@ -769,10 +769,11 @@ class dataLoadType:
             tmp3 = cv2.addWeighted(src1=self.singleImage_Francois.imgData, alpha=alpha, src2=self.singleImage_JS.imgData, beta=(1 - alpha), gamma=0.0, dst=None, dtype=-1)
 
             global flag_show_image
-            if flag_show_image == 1:
+            if flag_show_image == 2:
                 cv2.imwrite(path_save_image + 'see_through_result/' + (str((count + 10000)) + '.png'), np.concatenate((tmp1, tmp2, tmp3), axis=1))
             else:
                 cv2.imshow('See-Through frames', np.concatenate((tmp1, tmp2, tmp3), axis=1))
+                # cv2.imshow('See-Through frames', tmp3)
                 cv2.waitKey(1)
 
             #self.wrapper_homography(self.singleImage_JS.imgData, self.singleImage_Francois.imgData, frame_cctv=self.singleImage_cctv.imgData)

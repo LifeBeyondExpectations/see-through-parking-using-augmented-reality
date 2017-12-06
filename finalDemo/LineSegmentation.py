@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import division
+
 import numpy as np
 import cv2
 from KalmanFilter import *
@@ -17,209 +19,18 @@ class LineSegClass:
     boxColor = ((0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255), (255, 255, 0))
     kalmanInst = None
 
-    def __init__(self, flag_imshow_on, flag_print_on):
+    def __init__(self, flag_imshow_on, flag_print_on, cctvLocation3D=None, carLocationDepth=None):
         self.flag_imshow_on = flag_imshow_on
         self.flag_print_on = flag_print_on
 
+        if cctvLocation3D is not None:
+            self.cctvLocation3D = cctvLocation3D
+            self.carLocationDepth = carLocationDepth #height of the car from the ground. I just used 'depth' to clarify the width-height term.
+        else:
+            self.cctvLocation3D = None
+            self.carLocationDepth = None
+
         global flag_1_measureONLY_2_kalman
-
-    def whiteLineSegmentation(self, frame):
-
-        # print('shape of the frame is ', np.shape(frame))
-        frame = cv2.resize(frame, (1062, 598))
-
-        if self.flag_imshow_on == 1:
-            cv2.namedWindow('origin_figure')
-            cv2.imshow('origin_figure', frame)
-            cv2.waitKey(0)
-
-        # convert rgb to hsv
-        img_hue = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2]
-
-        if self.flag_imshow_on == 1:
-            cv2.namedWindow('hue figure')
-            cv2.imshow('hue figure', img_hue)
-            cv2.waitKey(0)
-
-        # start to opening the image(morpoholgy)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
-        # np.zeros((300, img_hue.shape[1]), dtype=np.uint8)
-        img_open = cv2.morphologyEx(img_hue, cv2.MORPH_OPEN, kernel)
-        print('dtype check', img_open.dtype)
-        if self.flag_imshow_on == 1:
-            cv2.namedWindow('img_open')
-            cv2.imshow('img_open', img_open)
-            print('max of img_open is ', np.max(img_open))
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-
-        img_sub = np.zeros(img_hue.shape, dtype=np.uint8)
-        for i in range(0, img_hue.shape[0]):
-            for j in range(0, img_hue.shape[1]):
-                if img_hue[i, j] < img_open[i, j]:
-                    img_sub[i, j] = 0
-                else:
-                    img_sub[i, j] = img_hue[i, j] - img_open[i, j]
-
-        if self.flag_imshow_on == 1:
-            cv2.namedWindow('img_sub')
-            cv2.imshow('img_sub', img_sub)
-            cv2.waitKey(0)
-        if self.flag_print_on == 2:
-            print('shape of the img_sub is ', img_sub.shape)
-
-        # start to closing the image(morpoholgy)
-        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
-        img_close = cv2.morphologyEx(img_sub, cv2.MORPH_OPEN, kernel_close)
-        if self.flag_imshow_on == 1:
-            cv2.namedWindow('img_close')
-            cv2.imshow('img_close', img_close)
-            cv2.waitKey(0)
-
-        img_sub = img_close
-        # #column wise threshold
-        # img_col_wise_otsu_threshold = np.zeros(img_sub.shape, dtype=np.uint8)
-        # img_col_wise_adoptive_threshold = np.zeros(img_sub.shape, dtype=np.uint8)
-        #
-        # for col in range(img_col_wise_otsu_threshold.shape[1]):
-        #
-        #     _, tmp = cv2.threshold(np.array(img_sub[:, col], dtype=np.uint8), 200, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        #     img_col_wise_otsu_threshold[:, col] = tmp.reshape(1, img_sub.shape[0])
-        #
-        #     img_col_wise_adoptive_threshold = cv2.adaptiveThreshold(np.array(img_sub, dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 2)
-        #
-        # if self.flag_imshow_on == 1:
-        #     cv2.imshow('img_row_wise_otsu_threshold', np.concatenate((img_col_wise_otsu_threshold, img_col_wise_adoptive_threshold), axis=1))
-        #     cv2.waitKey(0)
-        #
-        #     # start to opening the image(morpoholgy)
-        #     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (6, 6))
-        #     # np.zeros((300, img_hue.shape[1]), dtype=np.uint8)
-        #     img_col_wise_adoptive_threshold = cv2.morphologyEx(img_col_wise_adoptive_threshold, cv2.MORPH_OPEN, kernel)
-        #
-        #     if self.flag_imshow_on == 1:
-        #         cv2.namedWindow('img_col_wise_adoptive_threshold_opened')
-        #         cv2.imshow('img_col_wise_adoptive_threshold_opened', img_col_wise_adoptive_threshold)
-        #         cv2.waitKey(0)
-
-        # original
-        _, img_threshold = cv2.threshold(img_sub, 40, 255, cv2.THRESH_BINARY)
-
-        _, img_threshold_otsu = cv2.threshold(np.array(img_sub, dtype=np.uint8), 10, 255,
-                                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        imb_blur = cv2.GaussianBlur(img_sub, (5, 5), 0)
-        _, img_threshold_otsu_blur = cv2.threshold(np.array(imb_blur, dtype=np.uint8), 30, 255,
-                                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        # # split -> otsh -> merge
-        # middle_row = (img_sub.shape[0] // 2)
-        # middle_col = (img_sub.shape[1] // 2)
-        #
-        # if self.flag_imshow_on == 1:
-        #     cv2.namedWindow('img_sub_otsu_1')
-        #     cv2.imshow('img_sub_otsu_1', img_sub)
-        #     cv2.waitKey(0)
-        #
-        # _, img_split_otsu = cv2.threshold(np.array(img_sub[:middle_row, :middle_col], dtype=np.uint8), 10, 255,
-        #                                       cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        # img_sub[:middle_row, :middle_col] = img_split_otsu
-        #
-        # if self.flag_imshow_on == 1:
-        #     cv2.namedWindow('img_sub_otsu_2')
-        #     cv2.imshow('img_sub_otsu_2', img_sub)
-        #     cv2.waitKey(0)
-        #
-        # _, img_split_otsu = cv2.threshold(np.array(img_sub[middle_row:, :middle_col], dtype=np.uint8), 10, 255,
-        #                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        # img_sub[middle_row:, :middle_col] = img_split_otsu
-        #
-        # if self.flag_imshow_on == 1:
-        #     cv2.namedWindow('img_sub_otsu_3')
-        #     cv2.imshow('img_sub_otsu_3', img_sub)
-        #     cv2.waitKey(0)
-        #
-        # _, img_split_otsu = cv2.threshold(np.array(img_sub[:middle_row, middle_col:], dtype=np.uint8), 10, 255,
-        #                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        # img_sub[:middle_row, middle_col:] = img_split_otsu
-        #
-        # _, img_split_otsu = cv2.threshold(np.array(img_sub[middle_row:, middle_col:], dtype=np.uint8), 10, 255,
-        #                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        # img_sub[middle_row:, middle_col:] = img_split_otsu
-        # if self.flag_imshow_on == 1:
-        #     cv2.namedWindow('img_sub_otsu')
-        #     cv2.imshow('img_sub_otsu', img_sub)
-        #     cv2.waitKey(0)
-
-
-
-
-
-
-        # img_adaptive_threshold_mean = cv2.adaptiveThreshold(np.array(img_sub, dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-        #                                                     cv2.THRESH_BINARY_INV, 11 ,2)
-        # img_adaptive_threshold_gaussian = cv2.adaptiveThreshold(np.array(img_sub, dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        #                                                cv2.THRESH_BINARY_INV, 19, 2)
-
-        # fucking code
-        img_threshold_otsu[496:, :] = np.zeros((img_threshold_otsu.shape[0] - 496, img_threshold_otsu.shape[1]), dtype=np.uint8)
-        img_threshold_otsu[317:440, 685:885] = np.zeros((123, 200), dtype=np.uint8)
-        img_threshold_otsu[358:388, 896:934] = np.zeros((388 - 358, 934 - 896), dtype=np.uint8)
-
-        img_whiteLine = np.zeros(img_threshold_otsu.shape, dtype=np.uint8)
-
-        for i in range(img_threshold_otsu.shape[0]):
-            for j in range(img_threshold_otsu.shape[1]):
-
-                # copy the white line area
-                img_whiteLine[i, j] = img_threshold_otsu[i, j]
-
-                # Thresh_INV
-                if img_threshold_otsu[i, j] == 0:
-                    img_threshold_otsu[i, j] = 255
-                else:
-                    img_threshold_otsu[i, j] = 0
-
-        if self.flag_imshow_on == 1:
-            # cv2.namedWindow('img_threshold')
-            # cv2.imshow('img_threshold',
-            #            np.concatenate((img_threshold, img_threshold_otsu, img_threshold_otsu_blur), axis=1))
-            # img_adaptive_threshold_mean, img_adaptive_threshold_gaussian
-            cv2.namedWindow('img_threshold_otsu')
-            cv2.imshow('img_threshold_otsu', img_threshold_otsu)
-            cv2.waitKey(0)
-
-        # connected compnent labeling
-        num_labels, img_connectedComponents = cv2.connectedComponents(image=img_threshold_otsu,
-                                                                      connectivity=8)
-        color = np.zeros((num_labels, 3), dtype=np.uint8)
-        I_need_only_one_color = [180, 180, 0]  # [randint(0, 255), randint(0, 255), randint(0, 255)]
-        for i in range(num_labels):
-            color[i] = I_need_only_one_color
-
-        img_label = np.zeros(frame.shape, dtype=np.uint8)
-        for i in range(img_label.shape[0]):
-            for j in range(img_label.shape[1]):
-                if img_connectedComponents[i, j] > 1:  # and img_connectedComponents[i, j] != 5:
-                    # the reason " > 1 " is that we do know want background to be labeled.
-                    img_label[i, j] = color[img_connectedComponents[i, j]]
-                elif img_whiteLine[i, j] == 255:
-                    img_label[i, j] = np.array([0, 255, 255], dtype=np.uint8)
-
-        if self.flag_imshow_on == 1:
-            cv2.namedWindow('img_label')
-            cv2.imshow('img_label', img_label)
-            cv2.waitKey(0)
-
-        # the reason is that we do know want background, red lines, non-parking area(label = 6) to be labeled.
-        num_labels = num_labels - 3
-
-        if self.flag_print_on == 1:
-            print('what is the result', np.shape(img_connectedComponents), 'max is ',
-                  np.max(img_connectedComponents))
-            print('num_labels is ', num_labels)
-
-        return img_label  # img_threshold_otsu
 
     def redLineSegmentation(self, frame, pixelLeftTop=None, pixelRightBottom=None):
 
@@ -308,7 +119,7 @@ class LineSegClass:
         # start to closing the image(morpoholgy)
         kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, self.kernelSize_close)
         img_close = cv2.morphologyEx(img_saturation, cv2.MORPH_CLOSE, kernel_close)
-        if self.flag_imshow_on == 1:
+        if self.flag_imshow_on == 2:
             cv2.namedWindow('img_close (30, 30)')
             cv2.imshow('img_close (30, 30)', img_close)
             cv2.waitKey(1)
@@ -316,7 +127,7 @@ class LineSegClass:
         # threshold
         # _, img_threshold_otsu = cv2.threshold(np.array(img_close, dtype=np.uint8), 80, 255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         _, img_threshold = cv2.threshold(img_close, 110, 255, cv2.THRESH_BINARY)########  150 ####img_saturation##################################################img_close##########
-        if self.flag_imshow_on == 1:
+        if self.flag_imshow_on == 2:
             cv2.namedWindow('cv2.THRESH_BINARY')
             cv2.imshow('cv2.THRESH_BINARY', img_threshold)
             cv2.waitKey(1)
@@ -329,7 +140,7 @@ class LineSegClass:
         if self.flag_imshow_on == 2:
             cv2.namedWindow('img_open' + str(self.kernelSize_open))
             cv2.imshow('img_open' + str(self.kernelSize_open), img_open)
-            cv2.waitKey(0)
+            cv2.waitKey(1)
 
         # cv2.imshow('redLineSeg', np.concatenate((np.concatenate((frame[:,:,0], img_threshold), axis=1), np.concatenate((img_close, img_open), axis=1)), axis=0))
         # # cv2.imshow('redLineSeg', np.concatenate((frame[:, :, 0], img_saturation, img_threshold, img_open), axis=1))
@@ -338,11 +149,20 @@ class LineSegClass:
 
         return img_open
 
+    def adjustLocationError(self, carLocation2D):
+        # result = carLocation2D
+        if self.cctvLocation3D is not None:
+            ratio = self.carLocationDepth / self.cctvLocation3D[2]
+            for width_or_height in range(2):
+                carLocation2D[width_or_height] = (ratio * self.cctvLocation3D[width_or_height]) + ((1.0 - ratio) * carLocation2D[width_or_height])
+
+        # return carLocation2D
+
+
     def startDrawCircle(self, frame, img_open):
 
         # connected compnent labeling
         num_labels, img_connectedComponents, stat, centroid = cv2.connectedComponentsWithStats(image=img_open, connectivity=8, ltype=cv2.CV_16U)
-
         # print('num_labels are', num_labels)
         # print('stat is ', stat)
         # print('centroid is ', centroid)
@@ -356,16 +176,13 @@ class LineSegClass:
         _, contours, _ = cv2.findContours(image=img_open, mode=1, method=2)  # , hierarchy
         ######### LIST out of index ERROR : might be no .. car detected ... ##################################################################
 
-
         # print('contours is ', contours)
-        if contours != []:
+        if contours != [] and contours is not None:
             cnt = contours[0]  ##   0 ##########################################################################3 fucking code ##################
             rect = cv2.minAreaRect(cnt)
             box = cv2.boxPoints(rect)
             box = np.int0(box)
             cv2.drawContours(frame, [box], 0, (0, 0, 255), 2)
-
-
 
             # # for comparison with measurementONLY
             # for i in range(box.shape[0]):
@@ -438,6 +255,8 @@ class LineSegClass:
             else:
                 for corner in range(4):
                     # print('for ', corner, '-th corner')
+                    cv2.circle(frame, tuple(box[corner]), radius=10, color=(0, 0, 255), thickness=2)
+
                     for width_or_height in range(2):
                         # print('width_or_height is ', width_or_height)
 
@@ -459,6 +278,13 @@ class LineSegClass:
                     # draw circle
                     cornerPixel = tuple((self.kalmanInst[corner][0].x_post[0][0], self.kalmanInst[corner][1].x_post[0][0]))
                     cv2.circle(frame, cornerPixel, radius=5, color=self.boxColor[corner], thickness=2)
+
+                    # adjust the projection error for the carLocation. error cames from the assumption that the depth(height) of the car is zero.
+                    # beforeBox = np.array(box[minIndex])
+                    # self.adjustLocationError(carLocation2D=box[minIndex])
+                    # print('adjustment value is ', box[minIndex] - beforeBox)
+                    # cv2.circle(frame, tuple(box[corner]), radius=5, color=(0,255,0), thickness=2)
+
 
 
 
@@ -492,7 +318,6 @@ class LineSegClass:
             # origin_of_arrow = tuple(np.concatenate((self.kalmanInstCentroid[0].x_post[0][0], self.kalmanInstCentroid[1].x_post[0][0])))
             # self.end_of_arrow = tuple(np.concatenate((self.kalmanInstEndPixelOfArrow[0].x_post[0][0], self.kalmanInstEndPixelOfArrow[1].x_post[0][0])))
             self.end_of_arrow = tuple(np.stack((int(self.kalmanInstEndPixelOfArrow[0].x_post[0][0]), int(self.kalmanInstEndPixelOfArrow[1].x_post[0][0]))))
-            # print('fuck this tuple thing : self.end_of_arrow is ', self.end_of_arrow, 'origin_of_arrow is', origin_of_arrow)
             cv2.arrowedLine(img=frame, pt1=origin_of_arrow, pt2=self.end_of_arrow, color=(255, 255, 50), thickness=3)  # , line_type=None, shift=None, tipLength=None
 
             self.theta = self.getTheta(origin_of_arrow)
@@ -508,7 +333,8 @@ class LineSegClass:
                 cv2.imshow('redLineSeg', frame)
                 cv2.waitKey(0)
 
-            return frame, self.end_of_arrow, self.theta
+            self.adjustLocationError(self.end_of_arrow)
+        return frame, self.end_of_arrow, self.theta
 
     def fineClosestCorner(self, box, boxClosestIndex, boxIndex_in_order_of_kalman_index):
         boxIndex = [0, 1, 2, 3]
@@ -689,3 +515,202 @@ class LineSegClass:
         # #
         # # return img_label
 
+
+    #
+    # def whiteLineSegmentation(self, frame):
+    #
+    #     # print('shape of the frame is ', np.shape(frame))
+    #     frame = cv2.resize(frame, (1062, 598))
+    #
+    #     if self.flag_imshow_on == 1:
+    #         cv2.namedWindow('origin_figure')
+    #         cv2.imshow('origin_figure', frame)
+    #         cv2.waitKey(0)
+    #
+    #     # convert rgb to hsv
+    #     img_hue = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2]
+    #
+    #     if self.flag_imshow_on == 1:
+    #         cv2.namedWindow('hue figure')
+    #         cv2.imshow('hue figure', img_hue)
+    #         cv2.waitKey(0)
+    #
+    #     # start to opening the image(morpoholgy)
+    #     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
+    #     # np.zeros((300, img_hue.shape[1]), dtype=np.uint8)
+    #     img_open = cv2.morphologyEx(img_hue, cv2.MORPH_OPEN, kernel)
+    #     print('dtype check', img_open.dtype)
+    #     if self.flag_imshow_on == 1:
+    #         cv2.namedWindow('img_open')
+    #         cv2.imshow('img_open', img_open)
+    #         print('max of img_open is ', np.max(img_open))
+    #         cv2.waitKey(0)
+    #         cv2.destroyAllWindows()
+    #
+    #     img_sub = np.zeros(img_hue.shape, dtype=np.uint8)
+    #     for i in range(0, img_hue.shape[0]):
+    #         for j in range(0, img_hue.shape[1]):
+    #             if img_hue[i, j] < img_open[i, j]:
+    #                 img_sub[i, j] = 0
+    #             else:
+    #                 img_sub[i, j] = img_hue[i, j] - img_open[i, j]
+    #
+    #     if self.flag_imshow_on == 1:
+    #         cv2.namedWindow('img_sub')
+    #         cv2.imshow('img_sub', img_sub)
+    #         cv2.waitKey(0)
+    #     if self.flag_print_on == 2:
+    #         print('shape of the img_sub is ', img_sub.shape)
+    #
+    #     # start to closing the image(morpoholgy)
+    #     kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
+    #     img_close = cv2.morphologyEx(img_sub, cv2.MORPH_OPEN, kernel_close)
+    #     if self.flag_imshow_on == 1:
+    #         cv2.namedWindow('img_close')
+    #         cv2.imshow('img_close', img_close)
+    #         cv2.waitKey(0)
+    #
+    #     img_sub = img_close
+    #     # #column wise threshold
+    #     # img_col_wise_otsu_threshold = np.zeros(img_sub.shape, dtype=np.uint8)
+    #     # img_col_wise_adoptive_threshold = np.zeros(img_sub.shape, dtype=np.uint8)
+    #     #
+    #     # for col in range(img_col_wise_otsu_threshold.shape[1]):
+    #     #
+    #     #     _, tmp = cv2.threshold(np.array(img_sub[:, col], dtype=np.uint8), 200, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    #     #     img_col_wise_otsu_threshold[:, col] = tmp.reshape(1, img_sub.shape[0])
+    #     #
+    #     #     img_col_wise_adoptive_threshold = cv2.adaptiveThreshold(np.array(img_sub, dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 2)
+    #     #
+    #     # if self.flag_imshow_on == 1:
+    #     #     cv2.imshow('img_row_wise_otsu_threshold', np.concatenate((img_col_wise_otsu_threshold, img_col_wise_adoptive_threshold), axis=1))
+    #     #     cv2.waitKey(0)
+    #     #
+    #     #     # start to opening the image(morpoholgy)
+    #     #     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (6, 6))
+    #     #     # np.zeros((300, img_hue.shape[1]), dtype=np.uint8)
+    #     #     img_col_wise_adoptive_threshold = cv2.morphologyEx(img_col_wise_adoptive_threshold, cv2.MORPH_OPEN, kernel)
+    #     #
+    #     #     if self.flag_imshow_on == 1:
+    #     #         cv2.namedWindow('img_col_wise_adoptive_threshold_opened')
+    #     #         cv2.imshow('img_col_wise_adoptive_threshold_opened', img_col_wise_adoptive_threshold)
+    #     #         cv2.waitKey(0)
+    #
+    #     # original
+    #     _, img_threshold = cv2.threshold(img_sub, 40, 255, cv2.THRESH_BINARY)
+    #
+    #     _, img_threshold_otsu = cv2.threshold(np.array(img_sub, dtype=np.uint8), 10, 255,
+    #                                           cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    #
+    #     imb_blur = cv2.GaussianBlur(img_sub, (5, 5), 0)
+    #     _, img_threshold_otsu_blur = cv2.threshold(np.array(imb_blur, dtype=np.uint8), 30, 255,
+    #                                                cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    #
+    #     # # split -> otsh -> merge
+    #     # middle_row = (img_sub.shape[0] // 2)
+    #     # middle_col = (img_sub.shape[1] // 2)
+    #     #
+    #     # if self.flag_imshow_on == 1:
+    #     #     cv2.namedWindow('img_sub_otsu_1')
+    #     #     cv2.imshow('img_sub_otsu_1', img_sub)
+    #     #     cv2.waitKey(0)
+    #     #
+    #     # _, img_split_otsu = cv2.threshold(np.array(img_sub[:middle_row, :middle_col], dtype=np.uint8), 10, 255,
+    #     #                                       cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    #     # img_sub[:middle_row, :middle_col] = img_split_otsu
+    #     #
+    #     # if self.flag_imshow_on == 1:
+    #     #     cv2.namedWindow('img_sub_otsu_2')
+    #     #     cv2.imshow('img_sub_otsu_2', img_sub)
+    #     #     cv2.waitKey(0)
+    #     #
+    #     # _, img_split_otsu = cv2.threshold(np.array(img_sub[middle_row:, :middle_col], dtype=np.uint8), 10, 255,
+    #     #                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    #     # img_sub[middle_row:, :middle_col] = img_split_otsu
+    #     #
+    #     # if self.flag_imshow_on == 1:
+    #     #     cv2.namedWindow('img_sub_otsu_3')
+    #     #     cv2.imshow('img_sub_otsu_3', img_sub)
+    #     #     cv2.waitKey(0)
+    #     #
+    #     # _, img_split_otsu = cv2.threshold(np.array(img_sub[:middle_row, middle_col:], dtype=np.uint8), 10, 255,
+    #     #                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    #     # img_sub[:middle_row, middle_col:] = img_split_otsu
+    #     #
+    #     # _, img_split_otsu = cv2.threshold(np.array(img_sub[middle_row:, middle_col:], dtype=np.uint8), 10, 255,
+    #     #                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    #     # img_sub[middle_row:, middle_col:] = img_split_otsu
+    #     # if self.flag_imshow_on == 1:
+    #     #     cv2.namedWindow('img_sub_otsu')
+    #     #     cv2.imshow('img_sub_otsu', img_sub)
+    #     #     cv2.waitKey(0)
+    #
+    #
+    #
+    #
+    #
+    #
+    #     # img_adaptive_threshold_mean = cv2.adaptiveThreshold(np.array(img_sub, dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+    #     #                                                     cv2.THRESH_BINARY_INV, 11 ,2)
+    #     # img_adaptive_threshold_gaussian = cv2.adaptiveThreshold(np.array(img_sub, dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    #     #                                                cv2.THRESH_BINARY_INV, 19, 2)
+    #
+    #     # fucking code
+    #     img_threshold_otsu[496:, :] = np.zeros((img_threshold_otsu.shape[0] - 496, img_threshold_otsu.shape[1]), dtype=np.uint8)
+    #     img_threshold_otsu[317:440, 685:885] = np.zeros((123, 200), dtype=np.uint8)
+    #     img_threshold_otsu[358:388, 896:934] = np.zeros((388 - 358, 934 - 896), dtype=np.uint8)
+    #
+    #     img_whiteLine = np.zeros(img_threshold_otsu.shape, dtype=np.uint8)
+    #
+    #     for i in range(img_threshold_otsu.shape[0]):
+    #         for j in range(img_threshold_otsu.shape[1]):
+    #
+    #             # copy the white line area
+    #             img_whiteLine[i, j] = img_threshold_otsu[i, j]
+    #
+    #             # Thresh_INV
+    #             if img_threshold_otsu[i, j] == 0:
+    #                 img_threshold_otsu[i, j] = 255
+    #             else:
+    #                 img_threshold_otsu[i, j] = 0
+    #
+    #     if self.flag_imshow_on == 1:
+    #         # cv2.namedWindow('img_threshold')
+    #         # cv2.imshow('img_threshold',
+    #         #            np.concatenate((img_threshold, img_threshold_otsu, img_threshold_otsu_blur), axis=1))
+    #         # img_adaptive_threshold_mean, img_adaptive_threshold_gaussian
+    #         cv2.namedWindow('img_threshold_otsu')
+    #         cv2.imshow('img_threshold_otsu', img_threshold_otsu)
+    #         cv2.waitKey(0)
+    #
+    #     # connected compnent labeling
+    #     num_labels, img_connectedComponents = cv2.connectedComponents(image=img_threshold_otsu,
+    #                                                                   connectivity=8)
+    #     color = np.zeros((num_labels, 3), dtype=np.uint8)
+    #     I_need_only_one_color = [180, 180, 0]  # [randint(0, 255), randint(0, 255), randint(0, 255)]
+    #     for i in range(num_labels):
+    #         color[i] = I_need_only_one_color
+    #
+    #     img_label = np.zeros(frame.shape, dtype=np.uint8)
+    #     for i in range(img_label.shape[0]):
+    #         for j in range(img_label.shape[1]):
+    #             if img_connectedComponents[i, j] > 1:  # and img_connectedComponents[i, j] != 5:
+    #                 # the reason " > 1 " is that we do know want background to be labeled.
+    #                 img_label[i, j] = color[img_connectedComponents[i, j]]
+    #             elif img_whiteLine[i, j] == 255:
+    #                 img_label[i, j] = np.array([0, 255, 255], dtype=np.uint8)
+    #
+    #     if self.flag_imshow_on == 1:
+    #         cv2.namedWindow('img_label')
+    #         cv2.imshow('img_label', img_label)
+    #         cv2.waitKey(0)
+    #
+    #     # the reason is that we do know want background, red lines, non-parking area(label = 6) to be labeled.
+    #     num_labels = num_labels - 3
+    #
+    #     if self.flag_print_on == 1:
+    #         print('what is the result', np.shape(img_connectedComponents), 'max is ',
+    #               np.max(img_connectedComponents))
+    #         print('num_labels is ', num_labels)
+    #
+    #     return img_label  # img_threshold_otsu

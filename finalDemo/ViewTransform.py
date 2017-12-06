@@ -101,11 +101,10 @@ class Homography:
 
         self.homography, mask = cv2.findHomography(srcPoints=srcPixel_image,
                                                    dstPoints=dstPixel_ground,
-                                                   method=cv2.RANSAC, maxIters=100)
+                                                   method=0)#cv2.RANSAC, maxIters=100)
         self.warpResultShape = outputShape
-        print('homography is ', self.homography, 'np.dtype( ... ) = ', np.dtype(self.homography[0][0])) ###############################################
-        print('shape of the mask is', np.shape(mask))
+        # print('homography is ', self.homography, 'np.dtype( ... ) = ', np.dtype(self.homography[0][0])) ###############################################
+        # print('shape of the mask is', np.shape(mask))
 
-    def startHomography(self, frame, warpflags=cv2.INTER_CUBIC):
-        print()
+    def startHomography(self, frame, warpflags=0):
         return cv2.warpPerspective(frame, self.homography, self.warpResultShape, flags=(warpflags + cv2.INTER_LINEAR))#(360, 300 + 180) #cv2.WARP_INVERSE_MAP
